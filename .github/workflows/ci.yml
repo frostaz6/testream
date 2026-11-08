@@ -11,3 +11,8 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run test:media
+  docker-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --tag testream:ci .
