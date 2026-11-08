@@ -12,7 +12,7 @@ export function filterFor(level){
     ":force_original_aspect_ratio=decrease:flags=bicubic,pad="+q.width+":"+q.height+
     ":(ow-iw)/2:(oh-ih)/2:black,setsar=1";
 }
-export function transcodeArgs({url,quality='480p',seek=0,benchmark=false}){
+export function transcodeArgs({url,quality='480p',seek=0,benchmark=false,bridge=false}){
   const q=qualities[quality]||qualities['480p'];
   const args=['-hide_banner','-nostdin','-loglevel','warning','-stats_period','1','-progress','pipe:3'];
   if(benchmark){
@@ -23,6 +23,10 @@ export function transcodeArgs({url,quality='480p',seek=0,benchmark=false}){
   }else{
     args.push('-re','-readrate_initial_burst','0');
     if(seek>0)args.push('-ss',String(Math.max(0,Math.min(seek,864000))));
+    // FastChannels hardware-bridge URLs may END in .m3u8 but redirect to
+    // an HTTP MPEG-TS capture encoder. Do not let ffmpeg force HLS by suffix.
+    // This is only used for explicitly configured bridge feeds.
+    if(bridge)args.push('-f','mpegts');
     args.push('-i',url);
   }
   args.push('-map','0:v:0','-map',benchmark?'1:a:0':'0:a:0?',
@@ -35,12 +39,33 @@ export function transcodeArgs({url,quality='480p',seek=0,benchmark=false}){
     '-f','mpegts','pipe:1');
   return args;
 }
-export async function launch({url,quality,seek=0,benchmark=false,onData,onStatus,onExit}){
+// Return only curated, non-secret diagnostics to the browser. ffmpeg may print
+// signed URLs, authentication headers, and query-string tokens to stderr.
+export function publicEncoderFailure(stderr,code,bytes=0){
+  const message=String(stderr||'').toLowerCase();
+  if(bytes===0&&code===0)return {failureKind:'empty',error:'Upstream closed without returning video or audio.'};
+  if(/\b(401|403)\b|unauthorized|forbidden/.test(message))
+    return {failureKind:'authorization',error:'Upstream refused playback (HTTP 401/403). Verify DIRECTV authorization, entitlement, and the FastChannels bridge.'};
+  if(/\b(404|410)\b|not found/.test(message))
+    return {failureKind:'missing',error:'Capture endpoint or channel was not found. Refresh the FastChannels bridge feed.'};
+  if(/\b(500|502|503|504)\b|unavailable|not configured|tuner/.test(message))
+    return {failureKind:'bridge',error:'FastChannels capture/encoder is unavailable. Check bridge configuration, tuner capacity, and its healthcheck.'};
+  if(/invalid data|could not find codec|invalid argument|error when loading first segment/.test(message))
+    return {failureKind:'format',error:'Upstream did not return decodable MPEG-TS. Check for a DRM-only manifest, an empty capture, or an incorrect feed type.'};
+  if(/timed out|connection refused|connection reset|broken pipe/.test(message))
+    return {failureKind:'network',error:'Capture stream connection failed or timed out. Check the bridge device and network connectivity.'};
+  return {failureKind:'encoder',error:'ffmpeg stopped before playback finished. Inspect the bridge, capture hardware, and server logs (no source URLs exposed).'};
+}
+export async function launch({url,quality,seek=0,benchmark=false,bridge=false,onData,onStatus,onFirstData=()=>{},onExit}){
   if(!benchmark)await safeUrl(url);
-  const child=spawn('ffmpeg',transcodeArgs({url,quality,seek,benchmark}),
+  const child=spawn('ffmpeg',transcodeArgs({url,quality,seek,benchmark,bridge}),
     {stdio:['ignore','pipe','pipe','pipe'],windowsHide:true});
-  let stderr='', progress='',started=Date.now(),bytes=0,stopped=false;
-  child.stdout.on('data',chunk=>{bytes+=chunk.length;onData(chunk);});
+  let stderr='',progress='',started=Date.now(),bytes=0,stopped=false,firstDataMs=null;
+  child.stdout.on('data',chunk=>{
+    if(!chunk?.length)return;
+    if(firstDataMs===null){firstDataMs=Date.now()-started;onFirstData({firstPacketMs:firstDataMs});}
+    bytes+=chunk.length;onData(chunk);
+  });
   child.stderr.on('data',buf=>{stderr=(stderr+buf.toString()).slice(-1200);});
   child.stdio[3].on('data',buf=>{
     progress+=buf.toString();
@@ -48,13 +73,17 @@ export async function launch({url,quality,seek=0,benchmark=false,onData,onStatus
     progress=groups.pop()||'';
     if(groups.length){
       const entries=Object.fromEntries(groups.at(-1).split(/\r?\n/).filter(s=>s.includes('=')).map(s=>{const i=s.indexOf('=');return [s.slice(0,i),s.slice(i+1)];}));
-      onStatus({type:'encoder',fps:Number(entries.fps)||0,speed:entries.speed||'',
+      onStatus({type:'encoder',frames:Number(entries.frame)||0,fps:Number(entries.fps)||0,speed:entries.speed||'',
         outSeconds:Number(entries.out_time_us||entries.out_time_ms||0)/1e6,
         elapsedSeconds:(Date.now()-started)/1000,bytes});
     }
   });
   child.on('error',err=>{stderr=String(err.message);});
-  child.on('close',(code,signal)=>{if(!stopped)onExit({code,signal,error:stderr.slice(-800)});});
+  child.on('close',(code,signal)=>{
+    if(stopped)return;
+    const failure=code!==0||bytes===0?publicEncoderFailure(stderr,code,bytes):null;
+    onExit({code,signal,bytes,...(failure||{error:''})});
+  });
   return {
     child,get bytes(){return bytes;},
     get age(){return (Date.now()-started)/1000;},
