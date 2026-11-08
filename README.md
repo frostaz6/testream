@@ -93,6 +93,19 @@ This player accepts direct http(s) URLs returned by Stremio add-ons. It cannot d
 
 Stremio resume points are updated via datastoreGet/datastorePut every 15 seconds and on playback changes. Some streams lack a probe-able duration; the seek bar is unavailable if the server cannot learn its duration.
 
+## DIRECTV alternative: PrismCast software capture
+
+TeStream also supports PrismCast's own M3U playlist as a **third, independent Live TV source**. PrismCast advertises DIRECTV Stream in its built-in channel profiles and serves captured media as HLS. The browser showing TeStream still uses Canvas + WebAudio only; any Chrome HTML media playback occurs inside PrismCast on the *server*, not in TeStream. This may avoid HDMI capture hardware, but Widevine, service authorization, screen capture protection, hardware acceleration, and provider restrictions may prevent usable capture. Do not interpret channel discovery as proof of playback.
+
+1. Optional local Docker deployment: run `docker compose --profile prismcast up -d --build`. It starts PrismCast alongside TeStream without FastChannels.
+2. On the Docker host open `http://127.0.0.1:5589` for the PrismCast UI and `http://127.0.0.1:6080/vnc.html` for its Chrome sign-in. Both ports are loopback-only by default. Use a local SSH tunnel if managing the server remotely.
+3. In PrismCast, configure the built-in **DirecTV Stream** service and complete authorization in its Chrome session. Check its live preview works before configuring TeStream. PrismCast persists its browser profile to the prismcast-data Docker volume.
+4. In TeStream `.env`, set `PRISMCAST_M3U_URL=http://prismcast:5589/playlist` and include the trusted hostname in `STREAM_HOST_ALLOWLIST=prismcast`. If also using FastChannels, use a comma-separated allowlist of only hosts you administer. The `prismcast` hostname resolves inside the Docker Compose network.
+5. Recreate TeStream with `docker compose --profile prismcast up -d --build`, then open Live TV → PrismCast or Show DIRECTV channels. TeStream reads the M3U server-side and passes the HLS stream through ffmpeg to MPEG-1/MP2 for Canvas playback.
+6. Confirm **real moving video, sound, first decoder picture, nonzero video frames, stable sync**, and a multi-minute stream before claiming DIRECTV functionality. If PrismCast cannot capture a protected channel, TeStream cannot make it work by changing ffmpeg flags.
+
+FastChannels' own PrismCast bridge feed is a **different** integration from PrismCast's direct `/playlist` endpoint. It may need a secure (HTTPS or loopback) browser origin for Widevine; don't assume a Docker-internal `http://fastchannels:5523/watch` is a valid DRM secure context. The direct PrismCast playlist keeps this optional path independent from FastChannels.
+
 ## DIRECTV STREAM acceptance test — required before calling it working
 
 The repository and CI do not hold a DIRECTV account or HDMI capture device. We have **not observed real DIRECTV playback**. To consider this functional, verify each stage below:
