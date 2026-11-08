@@ -1,0 +1,24 @@
+services:
+  testream:
+    build: .
+    image: testream:local
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      PORT: "3000"
+      HOST: "0.0.0.0"
+      DATA_DIR: "/app/data"
+      SESSION_SECRET: "${SESSION_SECRET:?Set SESSION_SECRET in .env}"
+      PLEX_ALLOWLIST: "${PLEX_ALLOWLIST:?Set Plex username/email allowlist}"
+      STREAM_HOST_ALLOWLIST: "${STREAM_HOST_ALLOWLIST:-}"
+      TRUST_PROXY: "${TRUST_PROXY:-false}"
+    volumes:
+      - ./data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: 2g

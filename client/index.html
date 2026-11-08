@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b0d15">
+  <title>TeStream</title>
+  <!--STYLE-->
+  <!--SCRIPT-->
+</head>
+<body>
+  <div id="app">
+    <header id="nav">
+      <a class="brand" href="#home"><span class="mark">▶</span> Te<span>Stream</span></a>
+      <nav id="links">
+        <a href="#home" data-page="home">Home</a>
+        <a href="#movies" data-page="movies">Movies</a>
+        <a href="#series" data-page="series">Series</a>
+        <a href="#search" data-page="search">Search</a>
+        <a href="#benchmark" data-page="benchmark">Benchmark</a>
+      </nav>
+      <div class="user" id="userBadge"></div>
+    </header>
+    <main id="content"><div class="loader">Loading your library…</div></main>
+    <footer><span>TeStream · MPEG-TS → JSMpeg Canvas</span><span>Locally hosted · Private by default</span></footer>
+  </div>
+  <div id="overlay" hidden></div>
+  <div id="notice" role="status" aria-live="polite"></div>
+</body>
+</html>
