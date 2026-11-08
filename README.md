@@ -19,7 +19,7 @@ Docker publishes port 3000 only to **127.0.0.1**. To view on a different compute
 ## Features
 
 - Stremio sign-in via Stremio's account login API. Its authKey is stored only in the AES-256-GCM encrypted server-side session store. The browser receives only an opaque HttpOnly cookie.
-- No Plex dependency. Default login is Stremio, optionally checked against STREMIO_ALLOWLIST. Optional AUTH_MODE=jellyfin adds a Jellyfin username/password login and server-enforced JELLYFIN_ALLOWLIST before Stremio login.
+- No Plex dependency. Default login is Stremio, optionally checked against STREMIO_ALLOWLIST. Optional AUTH_MODE=jellyfin enables Jellyfin username/password with JELLYFIN_ALLOWLIST; Live TV and the benchmark can run under Jellyfin authentication alone, while on-demand Stremio titles still require their separate Stremio login.
 - Home (Continue Watching / Recently Added), Movies, Series, Search, show detail pages with seasons and episodes. Every library request and poster is proxied.
 - Installed Stremio add-ons supply direct HTTP media choices. The browser receives only opaque source IDs.
 - One WebSocket and one ffmpeg subprocess per viewer. MPEG-TS is binary; status and metrics are JSON text frames, filtered before JSMpeg processes data.
@@ -37,7 +37,7 @@ Docker publishes port 3000 only to **127.0.0.1**. To view on a different compute
 
 Default .env: AUTH_MODE=stremio. The browser signs in using Stremio credentials over the locally bound HTTP service; the Stremio auth token remains server-side. You can set STREMIO_ALLOWLIST to comma-separated Stremio email addresses for an extra authorization rule. If Stremio does not return a verified email address, the allowlist refuses access rather than trusting the entered username.
 
-Jellyfin is entirely optional, and only acts as a second authentication gate. For it, configure AUTH_MODE=jellyfin, JELLYFIN_URL=http://host.docker.internal:8096 (if Jellyfin is on the Docker host), and JELLYFIN_ALLOWLIST=username1,username2. The browser then first signs in to Jellyfin and next signs in to Stremio; Jellyfin does not need to serve any media. Jellyfin user IDs can also appear on the allowlist. The optional Jellyfin token is persisted encrypted server-side, never sent to the browser.
+Jellyfin is entirely optional. In Jellyfin mode, it authorizes Live TV and the benchmark without a Stremio login, while Stremio on-demand playback requires a Stremio account in addition. For it, configure AUTH_MODE=jellyfin, JELLYFIN_URL=http://host.docker.internal:8096 (if Jellyfin is on the Docker host), and JELLYFIN_ALLOWLIST=username1,username2. The browser then first signs in to Jellyfin and next signs in to Stremio; Jellyfin does not need to serve any media. Jellyfin user IDs can also appear on the allowlist. The optional Jellyfin token is persisted encrypted server-side, never sent to the browser.
 
 **Security:** The default single-account Stremio mode is suitable for localhost-only use. Do not expose it publicly without first deciding on a secure HTTPS reverse proxy and authentication controls. STREMIO_ALLOWLIST does not replace a perimeter for a public service. Jellyfin login over unencrypted HTTP transmits credentials between this container and the Jellyfin server on your local network; prefer HTTPS if they are on different trusted hosts.
 

@@ -48,6 +48,11 @@ function stremioGuard(req,res,next){
   if(!req.session.stremio)return res.status(401).json({error:'Sign in to Stremio first'});
   next();
 }
+function liveGuard(req,res,next){
+  if(!jellyfinAuthorized(req.session))return res.status(403).json({error:'Jellyfin login required'});
+  if(authMode==='stremio'&&!req.session.stremio)return res.status(401).json({error:'Stremio sign-in required'});
+  next();
+}
 // Short-window defense against accidental credential brute-force, including when proxied.
 const attempts=new Map();
 function loginLimit(req,res,next){
@@ -81,12 +86,12 @@ app.post('/api/stremio/logout',gateGuard,respond(async(req,res)=>{
 app.get('/api/home',stremioGuard,respond(async(req,res)=>res.json(await stremio.home(req.session))));
 app.get('/api/library',stremioGuard,respond(async(req,res)=>res.json(await stremio.libraryPage(req.session,req.query.type))));
 const bridgeTuners=createTunerPool(process.env.FASTCHANNELS_BRIDGE_TUNERS||1);
-app.get('/api/live',stremioGuard,respond(async(req,res)=>{
+app.get('/api/live',liveGuard,respond(async(req,res)=>{
   const result=await live.lineup(req.query.refresh==='1');
   res.setHeader('Cache-Control','private, no-store');
   res.json({...result,tuners:{used:bridgeTuners.used,max:bridgeTuners.max},feeds:live.configuredFeeds()});
 }));
-app.post('/api/live/select/:id',stremioGuard,respond(async(req,res)=>{
+app.post('/api/live/select/:id',liveGuard,respond(async(req,res)=>{
   res.json(await live.select(req.session,req.params.id));
 }));
 app.get('/api/search',stremioGuard,respond(async(req,res)=>res.json(await stremio.search(req.session,String(req.query.q||'')))));
@@ -127,7 +132,7 @@ app.get('/api/poster/:id',stremioGuard,respond(async(req,res)=>{
   }
   throw new Error('Too many poster redirects');
 }));
-app.get('/api/speedtest',stremioGuard,(req,res)=>{
+app.get('/api/speedtest',liveGuard,(req,res)=>{
   const data=crypto.randomBytes(512*1024);
   res.setHeader('Content-Type','application/octet-stream');
   res.setHeader('Content-Length',data.length);
@@ -158,13 +163,15 @@ server.on('upgrade',(req,socket,head)=>{
     if(origin&&new URL(origin).host!==req.headers.host)throw new Error('Origin mismatch');
     const raw=(req.headers.cookie||'').match(/(?:^|;\s*)tesstream=([^;]+)/)?.[1];
     const session=readSession(raw?decodeURIComponent(raw):'');
-    if(!session||!session.stremio||!jellyfinAuthorized(session))throw new Error('Sign-in required');
+    if(!session||!jellyfinAuthorized(session))throw new Error('Sign-in required');
+    if(authMode==='stremio'&&!session.stremio)throw new Error('Stremio sign-in required');
     const u=new URL(req.url,'http://localhost');
     if(u.pathname!=='/ws')throw new Error('Not found');
     const bench=u.searchParams.get('benchmark')==='1';
     if(!bench&&!session.stremio)throw new Error('Stremio sign-in required');
     const source=bench?null:stremio.selectedStream(session,u.searchParams.get('streamId'));
     if(!bench&&!source)throw new Error('Stream selection expired');
+    if(!bench&&!source.live&&!session.stremio)throw new Error('Stremio sign-in required for on-demand media');
     const quality=qualities[u.searchParams.get('quality')]?u.searchParams.get('quality'):'480p';
     const seek=source?.live?0:Math.max(0,Math.min(Number(u.searchParams.get('seek'))||0,864000));
     wsServer.handleUpgrade(req,socket,head,ws=>{

@@ -62,7 +62,12 @@ function showStremioSignIn(){
     '<h1>Connect Stremio</h1><p>Your Stremio token stays encrypted on the server. The browser receives only an HttpOnly session cookie.</p>'+
     '<form id="stremioForm" class="form"><input required type="email" name="email" placeholder="Stremio email" autocomplete="username">'+
     '<input required type="password" name="password" placeholder="Stremio password" autocomplete="current-password">'+
-    '<button class="btn" type="submit">Sign in to Stremio</button></form></div>'+externalProviders();
+    '<button class="btn" type="submit">Sign in to Stremio</button></form>'+
+    (session.authMode==='jellyfin'&&session.jellyfin?
+      '<p class="muted">You can also use Live TV with your Jellyfin account without connecting Stremio.</p>'+
+      '<a href="#live" class="btn secondary" id="goLiveDirect">Continue to Live TV</a>':'')+
+    '</div>'+externalProviders();
+  main.querySelector('#goLiveDirect')?.addEventListener('click',()=>navigate());
   main.querySelector('#stremioForm').addEventListener('submit',async e=>{
     e.preventDefault();const form=e.currentTarget;
     const email=form.elements.email.value,password=form.elements.password.value;
@@ -74,13 +79,22 @@ function showStremioSignIn(){
 async function init(){
   session=await api('/api/session');
   if(session.authMode==='jellyfin'&&!session.jellyfin){showJellyfinSignIn();return;}
-  if(!session.stremio){showStremioSignIn();return;}
+  if(!session.stremio&&!(session.authMode==='jellyfin'&&session.jellyfin&&location.hash==='#live')){
+    showStremioSignIn();return;
+  }
   await navigate();
 }
 async function navigate(){
-  if(!session?.stremio||(session.authMode==='jellyfin'&&!session.jellyfin))return;
+  if(!session)return;
   const route=decodeURIComponent((location.hash||'#home').slice(1));
   const parts=route.split('/'),page=parts[0]||'home',ticket=++routeSeq;
+  if(session.authMode==='jellyfin'&&!session.jellyfin){showJellyfinSignIn();return;}
+  if(!session.stremio&&page!=='live'&&page!=='benchmark'){
+    showStremioSignIn();return;
+  }
+  if(!session.stremio&&session.authMode!=='jellyfin'){
+    showStremioSignIn();return;
+  }
   activeLinks(page);loading();
   try{
     if(page==='home'){
