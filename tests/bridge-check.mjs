@@ -37,13 +37,23 @@ try{
     '-f','mpegts','pipe:1'
   ]);
   assert(fixture.length>100000,'Fixture must contain actual MPEG-TS packets');
-  let redirects=0,encoderHits=0;
+  let redirects=0,encoderHits=0,hlsHits=0;
+  const hlsIndex='#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:3\n'+
+    '#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:2.5,\nsegment.ts\n#EXT-X-ENDLIST\n';
   server=http.createServer((req,res)=>{
     if(req.url==='/play/fc-player/directv/206.m3u8'){
       redirects++;
       res.writeHead(302,{Location:'/channels/7/stream.mpg'});res.end();
     }else if(req.url==='/channels/7/stream.mpg'){
       encoderHits++;
+      res.writeHead(200,{'Content-Type':'video/mp2t','Content-Length':fixture.length});
+      res.end(fixture);
+    }else if(req.url==='/prismcast/live.m3u8'){
+      hlsHits++;
+      res.writeHead(200,{'Content-Type':'application/vnd.apple.mpegurl'});
+      res.end(hlsIndex);
+    }else if(req.url==='/prismcast/segment.ts'){
+      hlsHits++;
       res.writeHead(200,{'Content-Type':'video/mp2t','Content-Length':fixture.length});
       res.end(fixture);
     }else{res.writeHead(404);res.end();}
@@ -78,6 +88,31 @@ try{
   console.log(JSON.stringify({result:'pass',test:'FastChannels-style 302 to MPEG-TS',
     bytes:outcome.bytes,firstPacketMs:first[0].firstPacketMs,videoFrames:encoder.at(-1)?.frames,
     redirects,encoderHits,streams},null,2));
+  // PrismCast's direct /playlist feed uses HLS capture, not HDMI MPEG-TS.
+  // Verify that TeStream's *unforced* demuxing works for its playlist URLs.
+  const softwareUrl='http://127.0.0.1:'+server.address().port+'/prismcast/live.m3u8';
+  worker=null;
+  const softwareData=[],softwareFrames=[];
+  const softwareDone=new Promise((resolve,reject)=>{
+    const watchdog=setTimeout(()=>{worker?.stop();reject(new Error('PrismCast-style HLS timeout'));},25000);
+    watchdog.unref();
+    launch({url:softwareUrl,quality:'360p',bridge:false,
+      onData:b=>softwareData.push(b),onStatus:m=>softwareFrames.push(m),
+      onExit:m=>{clearTimeout(watchdog);m.code===0?resolve(m):reject(new Error(m.error));}
+    }).then(w=>{worker=w;}).catch(e=>{clearTimeout(watchdog);reject(e);});
+  });
+  const softwareResult=await softwareDone;
+  assert(softwareResult.bytes>100000,'PrismCast-style HLS should produce transcoded media');
+  assert(hlsHits>=2,'HLS playlist and TS segment must both be requested');
+  const softwareOut=join(temp,'prismcast-transcoded.ts');
+  await writeFile(softwareOut,Buffer.concat(softwareData));
+  const probe=await exec('ffprobe',['-v','error','-show_entries','stream=codec_name,sample_rate',
+    '-of','json',softwareOut]);
+  const softwareStreams=JSON.parse(probe.stdout).streams;
+  assert(softwareStreams.some(x=>x.codec_name==='mpeg1video'));
+  assert(softwareStreams.some(x=>x.codec_name==='mp2'&&x.sample_rate==='44100'));
+  console.log(JSON.stringify({result:'pass',test:'PrismCast-style HLS to Canvas MPEG-TS',
+    bytes:softwareResult.bytes,frames:softwareFrames.at(-1)?.frames,hlsRequests:hlsHits},null,2));
 }finally{
   worker?.stop();
   if(server)await new Promise(resolve=>server.close(resolve));
