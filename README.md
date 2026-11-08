@@ -48,7 +48,7 @@ Jellyfin is entirely optional, and only acts as a second authentication gate. Fo
 To connect a trusted FastChannels feed:
 
 1. Install and configure FastChannels separately. Use its own official/provider sign-ins and enable only the channels you are authorized to view.
-2. Under FastChannels → Feeds, copy an M3U URL, e.g. `http://fastchannels:5523/feeds/default/m3u`. Ensure TeStream's container can reach it.
+2. Under FastChannels → Feeds, copy an M3U URL, e.g. `http://fastchannels:5523/feeds/default/m3u` for ordinary **clear** channels. To play DIRECTV/ESPN protected channels through a supported capture setup, use the **bridge-specific M3U feed** exported under FastChannels → Bridge / Feeds, not the ordinary default feed. Ensure TeStream's container can reach the selected feed.
 3. Set `FASTCHANNELS_M3U_URL=http://fastchannels:5523/feeds/default/m3u` and add exactly `fastchannels` to `STREAM_HOST_ALLOWLIST` (only when that hostname resolves to a service you control).
 4. Recreate TeStream and open Live TV.
 
