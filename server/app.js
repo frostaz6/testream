@@ -190,6 +190,8 @@ server.on('upgrade',(req,socket,head)=>{
 });
 wsServer.on('connection',async(ws,opts)=>{
   let worker=null,lastTick=Date.now(),lastBytes=0,encoder={};
+  const openedAt=Date.now();
+  let lastMediaAt=openedAt,firstPacketMs=null;
   const send=message=>{if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(message));};
   const timer=setInterval(()=>{
     if(ws.readyState!==WebSocket.OPEN)return;
@@ -197,17 +199,35 @@ wsServer.on('connection',async(ws,opts)=>{
     const nowBytes=worker?.bytes||0;
     const bps=Math.max(0,(nowBytes-lastBytes)/Math.max(.01,delta));lastBytes=nowBytes;
     const bytesPerSecond=bitrate(opts.quality)*1000/8;
-    send({...encoder,type:'status',quality:opts.quality,bufferedBytes:ws.bufferedAmount,
-      bufferedSeconds:ws.bufferedAmount/bytesPerSecond,throughputBps:bps,uptime:worker?.age||0});
-    if(ws.bufferedAmount>bytesPerSecond*8){send({type:'error',message:'Client too slow: encoder stopped'});ws.close(1013);}
+    send({...encoder,type:'status',quality:opts.quality,source:opts.source?.bridge?'capture-bridge':opts.source?.live?'live':'stremio',
+      firstPacketMs,bufferedBytes:ws.bufferedAmount,bufferedSeconds:ws.bufferedAmount/bytesPerSecond,
+      throughputBps:bps,uptime:worker?.age||0});
+    // A successful upstream TCP connection is NOT proof of usable MPEG-TS.
+    // Fail clearly if a capture tuner never produces any media.
+    if(worker?.bytes===0&&Date.now()-openedAt>45000){
+      send({type:'error',code:'NO_MEDIA',message:'Capture did not produce any media in 45 seconds. Run the FastChannels live bridge healthcheck and verify the HDMI encoder.'});
+      ws.close(1013,'No capture data');
+    }else if(worker?.bytes>0&&Date.now()-lastMediaAt>25000){
+      send({type:'error',code:'MEDIA_STALLED',message:'No media data received for 25 seconds. Check the capture encoder and DIRECTV player device.'});
+      ws.close(1013,'Capture stalled');
+    }else if(ws.bufferedAmount>bytesPerSecond*8){
+      send({type:'error',code:'CLIENT_BACKPRESSURE',message:'Client too slow: encoder stopped'});
+      ws.close(1013);
+    }
   },2000);timer.unref();
   ws.on('message',data=>{try{const x=JSON.parse(data.toString());if(x.type==='ping')send({type:'pong',t:x.t});}catch{}});
   const cleanup=()=>{clearInterval(timer);worker?.stop();worker=null;};
   ws.once('close',cleanup);ws.once('error',cleanup);
   try{
-    worker=await launch({url:opts.source?.url,benchmark:opts.bench,quality:opts.quality,seek:opts.seek,
-      onData:data=>{if(ws.readyState===WebSocket.OPEN)ws.send(data,{binary:true});},
-      onStatus:m=>{encoder=m;},onExit:m=>{send({type:'ended',...m});ws.close();}});
+    worker=await launch({url:opts.source?.url,benchmark:opts.bench,bridge:!!opts.source?.bridge,
+      quality:opts.quality,seek:opts.seek,
+      onData:data=>{
+        lastMediaAt=Date.now();
+        if(ws.readyState===WebSocket.OPEN)ws.send(data,{binary:true});
+      },
+      onFirstData:m=>{firstPacketMs=m.firstPacketMs;send({type:'firstPacket',...m});},
+      onStatus:m=>{encoder=m;},
+      onExit:m=>{send({type:'ended',...m});ws.close();}});
     if(ws.readyState!==WebSocket.OPEN)cleanup();
     else send({type:'started',quality:opts.quality,seek:opts.seek,benchmark:opts.bench});
   }catch(e){send({type:'error',message:e.message});ws.close(1011);}
