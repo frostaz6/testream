@@ -19,6 +19,7 @@ services:
       FASTCHANNELS_M3U_URL: "${FASTCHANNELS_M3U_URL:-}"
       FASTCHANNELS_EPG_URL: "${FASTCHANNELS_EPG_URL:-}"
       FASTCHANNELS_BRIDGE_M3U_URL: "${FASTCHANNELS_BRIDGE_M3U_URL:-}"
+      PRISMCAST_M3U_URL: "${PRISMCAST_M3U_URL:-}"
       FASTCHANNELS_BRIDGE_EPG_URL: "${FASTCHANNELS_BRIDGE_EPG_URL:-}"
       FASTCHANNELS_BRIDGE_TUNERS: "${FASTCHANNELS_BRIDGE_TUNERS:-1}"
       TRUST_PROXY: "${TRUST_PROXY:-false}"
@@ -47,7 +48,26 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  prismcast:
+    profiles: [prismcast]
+    image: ghcr.io/hjdhjd/prismcast:latest
+    restart: unless-stopped
+    shm_size: "2gb"
+    ports:
+      - "127.0.0.1:5589:5589"
+      - "127.0.0.1:6080:6080"
+    environment:
+      PORT: "5589"
+      NOVNC_PORT: "6080"
+      HDHR_ENABLED: "false"
+      SCREEN_WIDTH: "1920"
+      SCREEN_HEIGHT: "1080"
+      SCREEN_DEPTH: "24"
+    volumes:
+      - prismcast-data:/root/.prismcast
+
 volumes:
   testream-data:
   fastchannels-data:
   fastchannels-adb:
+  prismcast-data:

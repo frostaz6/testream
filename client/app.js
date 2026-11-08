@@ -146,7 +146,7 @@ async function showLive(ticket,force=false){
   if(!data.configured){
     main.innerHTML='<div class="eyebrow">LIVE TV · CANVAS</div><h1>Live TV and sports</h1>'+
       '<div class="panel"><h3>Connect a trusted FastChannels feed</h3>'+
-      '<p>Configure FASTCHANNELS_M3U_URL and FASTCHANNELS_EPG_URL for clear TV, and the separate FASTCHANNELS_BRIDGE_M3U_URL / FASTCHANNELS_BRIDGE_EPG_URL for hardware-bridge channels.</p>'+
+      '<p>For DIRECTV without HDMI hardware, configure PRISMCAST_M3U_URL from a PrismCast /playlist endpoint. Alternatively configure FASTCHANNELS_BRIDGE_M3U_URL for supported hardware capture.</p>'+
       '<p>TeStream requires an accessible media feed. A protected DRM manifest alone is not playable in JSMpeg.</p></div>';
     return;
   }
@@ -157,18 +157,19 @@ async function showLive(ticket,force=false){
   });
   const directv=list.filter(c=>c.provider==='DIRECTV STREAM');
   const directvCapture=directv.filter(c=>c.bridge).length;
+  const directvPrismcast=directv.filter(c=>c.prismcast).length;
   const time=x=>new Date(x).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
   const errors=(data.errors||[]).map(x=>'<p class="muted">'+esc(x.feed)+': '+esc(x.message)+'</p>').join('');
   main.innerHTML='<div class="eyebrow">CANVAS LIVE TV</div><h1>Live TV and sports</h1>'+
     '<p class="muted">MPEG-TS → JSMpeg Canvas/WebAudio. DRM-only channels require a legitimate bridge providing playable video.</p>'+
     '<div class="panel"><h3>DIRECTV STREAM readiness</h3>'+
-    '<p>'+directv.length+' DIRECTV channels listed; '+directvCapture+' in the capture feed. '+
-      (directvCapture?'Channel listing detected — playback still requires a successful tune and decoded video/audio.':
-        'No DIRECTV capture channels detected. Check FastChannels device-code sign-in, enable the DIRECTV source, and import its hardware bridge feed (prefer one mixed playlist for Gracenote channels).')+
+    '<p>'+directv.length+' DIRECTV channels listed; '+directvCapture+' via HDMI bridge, '+directvPrismcast+' via PrismCast. '+
+      (directvCapture+directvPrismcast?'Channel listing detected — playback still requires a successful tune and decoded video/audio.':
+        'No DIRECTV channels detected. Configure a hardware-bridge feed from FastChannels, or use a PrismCast /playlist feed for software capture.')+
     '</p><button class="btn secondary tiny" id="directvOnly">Show DIRECTV channels</button>'+
     '<p class="muted">A nonempty lineup is not proof of a usable HDMI feed. Run the FastChannels Bridge → Live bridge test and then play a channel here with Stats enabled.</p></div>'+
     '<div class="liveToolbar"><input class="input" id="filterLive" placeholder="Find a channel, show or event…" type="search">'+
-    '<select id="feedFilter" class="quality" aria-label="Feed"><option value="all">All feeds</option><option value="clear">Direct</option><option value="bridge">Bridge</option><option value="DIRECTV STREAM">DIRECTV</option></select>'+
+    '<select id="feedFilter" class="quality" aria-label="Feed"><option value="all">All feeds</option><option value="clear">Direct</option><option value="bridge">HDMI Bridge</option><option value="prismcast">PrismCast</option><option value="DIRECTV STREAM">DIRECTV</option></select>'+
     '<button class="btn secondary" id="refreshLive">Refresh guide</button>'+
     '<span class="muted">'+list.length+' channels · Capture tuners '+esc(data.tuners?.used||0)+'/'+esc(data.tuners?.max||1)+'</span></div>'+
     (errors?'<div class="panel">'+errors+'</div>':'')+
@@ -189,7 +190,7 @@ async function showLive(ticket,force=false){
       const progress=show&&show.stop>show.start?Math.max(0,Math.min(100,100*(Date.now()-show.start)/(show.stop-show.start))):0;
       return '<div class="guideRow"><div class="guideChannel">'+
         '<span class="guideNumber">'+esc(x.channelNumber||'TV')+'</span><div><strong>'+esc(x.name)+'</strong>'+
-        '<small>'+esc([x.provider,x.group,x.bridge?'Capture bridge':'Direct'].filter(Boolean).join(' · '))+'</small></div></div>'+
+        '<small>'+esc([x.provider,x.group,x.bridge?'HDMI bridge':x.prismcast?'PrismCast':'Direct'].filter(Boolean).join(' · '))+'</small></div></div>'+
         '<div class="guideProgram"><strong>'+esc(show?.title||'No current guide information')+'</strong>'+
         '<small>'+(show?time(show.start)+'–'+time(show.stop):'Live channel')+
         (up?' · Next '+time(up.start)+': '+esc(up.title):'')+'</small>'+

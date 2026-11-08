@@ -30,3 +30,14 @@ test('detects DIRECTV bridge channels without exposing the source URL',()=>{
   const result=parsePlaylist('#EXTM3U\n#EXTINF:-1 group-title="Sports",ESPN\nhttp://fastchannels:5523/play/fc-player/directv/206.m3u8\n','http://fastchannels:5523/');
   assert.equal(result[0].provider,'DIRECTV STREAM');
 });
+
+test('PrismCast playlists identify DIRECTV via tvg-id or group metadata',()=>{
+  const body='#EXTM3U\n'+
+    '#EXTINF:-1 tvg-id="directv.206" group-title="Sports",ESPN\n'+
+    'http://prismcast:5589/stream/206/index.m3u8\n'+
+    '#EXTINF:-1 group-title="DirecTV Stream",CNN\n'+
+    'http://prismcast:5589/play?channel=cnn\n';
+  const list=parsePlaylist(body,'http://prismcast:5589/playlist');
+  assert.equal(list[0].provider,'DIRECTV STREAM');
+  assert.equal(list[1].provider,'DIRECTV STREAM');
+});
