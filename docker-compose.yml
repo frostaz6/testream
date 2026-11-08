@@ -33,5 +33,21 @@ services:
     pids_limit: 128
     mem_limit: 2g
 
+  fastchannels:
+    profiles: [fastchannels]
+    image: ghcr.io/kineticman/fastchannels:latest
+    restart: unless-stopped
+    ports:
+      - "${FASTCHANNELS_BIND_IP:-127.0.0.1}:5523:5523"
+    environment:
+      PUBLIC_BASE_URL: "${FASTCHANNELS_PUBLIC_BASE_URL:-http://127.0.0.1:5523}"
+    volumes:
+      - fastchannels-data:/data
+      - fastchannels-adb:/root/.android
+    security_opt:
+      - no-new-privileges:true
+
 volumes:
   testream-data:
+  fastchannels-data:
+  fastchannels-adb:

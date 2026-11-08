@@ -45,6 +45,17 @@ Jellyfin is entirely optional, and only acts as a second authentication gate. Fo
 
 TeStream uses no HTML video element for Live TV. FastChannels provides M3U channel metadata and XMLTV schedules, while TeStream transcodes any **accessible, unencrypted** stream through ffmpeg to JSMpeg Canvas and WebAudio. Merely importing an encrypted ESPN+/DIRECTV manifest does **not** make protected video playable.
 
+### Start FastChannels locally (optional Docker profile)
+
+An opt-in FastChannels service is in docker-compose.yml, but **it is not started by default**.
+To start it alongside TeStream, run `docker compose --profile fastchannels up -d --build`.
+Open `http://127.0.0.1:5523/admin/` **on the Docker host** (or through an SSH tunnel).
+Switch FastChannels to **Advanced mode** and configure the provider logins inside FastChannels, never inside TeStream.
+
+By default, the FastChannels admin interface is localhost-only. For an Android TV bridge, its player app must reach FastChannels over your private network: choose your specific LAN interface address for `FASTCHANNELS_BIND_IP` and a reachable `FASTCHANNELS_PUBLIC_BASE_URL` only when you're ready, and restrict access with the host firewall. The default localhost URL cannot be reached from a separate Android TV box.
+
+FastChannels needs to pair ADB with the device and an **authorized working capture source** (HDMI Capture or ah4c) before the bridge feeds become functional. FastChannels documentation calls out onn. Android TV devices as possible player targets, but actual model, DRM, HDCP and encoder compatibility require testing.
+
 ### Feed configuration
 
 Install and configure FastChannels separately. Its newest documentation lists ESPN and DIRECTV STREAM account integrations and explains how a verified Android/Fire TV device + external capture hardware may provide a bridge output. You must use only provider-authorized playback and respect HDCP restrictions. FastChannels is not automatically deployed by TeStream.
