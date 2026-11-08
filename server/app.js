@@ -12,6 +12,7 @@ import {authMode,jellyfinAuthorized} from './access.js';
 import * as jellyfin from './jellyfin.js';
 import * as stremio from './stremio.js';
 import * as live from './live.js';
+import {createTunerPool} from './tuner.js';
 import {safeUrl} from './net.js';
 import {qualities,bitrate,launch} from './ffmpeg.js';
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
@@ -79,9 +80,11 @@ app.post('/api/stremio/logout',gateGuard,respond(async(req,res)=>{
 }));
 app.get('/api/home',stremioGuard,respond(async(req,res)=>res.json(await stremio.home(req.session))));
 app.get('/api/library',stremioGuard,respond(async(req,res)=>res.json(await stremio.libraryPage(req.session,req.query.type))));
+const bridgeTuners=createTunerPool(process.env.FASTCHANNELS_BRIDGE_TUNERS||1);
 app.get('/api/live',stremioGuard,respond(async(req,res)=>{
-  const {configured,channels}=await live.channels();
-  res.json({configured,channels:channels.map(({id,name,group,channelNumber,tvgId})=>({id,name,group,channelNumber,tvgId}))});
+  const result=await live.lineup(req.query.refresh==='1');
+  res.setHeader('Cache-Control','private, no-store');
+  res.json({...result,tuners:{used:bridgeTuners.used,max:bridgeTuners.max},feeds:live.configuredFeeds()});
 }));
 app.post('/api/live/select/:id',stremioGuard,respond(async(req,res)=>{
   res.json(await live.select(req.session,req.params.id));
@@ -164,7 +167,18 @@ server.on('upgrade',(req,socket,head)=>{
     if(!bench&&!source)throw new Error('Stream selection expired');
     const quality=qualities[u.searchParams.get('quality')]?u.searchParams.get('quality'):'480p';
     const seek=source?.live?0:Math.max(0,Math.min(Number(u.searchParams.get('seek'))||0,864000));
-    wsServer.handleUpgrade(req,socket,head,ws=>wsServer.emit('connection',ws,{bench,source,quality,seek}));
+    wsServer.handleUpgrade(req,socket,head,ws=>{
+      if(source?.bridge){
+        const lease=bridgeTuners.claim(session.id,ws);
+        if(!lease.granted){
+          ws.send(JSON.stringify({type:'error',message:'Bridge capture tuner is already in use. Try again when the other viewer finishes.'}));
+          ws.close(1013,'Tuner busy');return;
+        }
+        ws.once('close',()=>bridgeTuners.release(session.id,ws));
+        if(lease.previous&&lease.previous!==ws)lease.previous.close(1001,'Replaced by new playback session');
+      }
+      wsServer.emit('connection',ws,{bench,source,quality,seek});
+    });
   }catch{socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');socket.destroy();}
 });
 wsServer.on('connection',async(ws,opts)=>{

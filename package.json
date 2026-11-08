@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": {"node": ">=22"},
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "node scripts/build.mjs",
     "start": "node server/app.js",
@@ -14,7 +16,8 @@
   "dependencies": {
     "@cycjimmy/jsmpeg-player": "6.1.2",
     "express": "^5.1.0",
-    "ws": "^8.18.3"
+    "ws": "^8.18.3",
+    "fast-xml-parser": "^5.12.0"
   },
   "devDependencies": {
     "esbuild": "^0.25.12"

@@ -126,41 +126,66 @@ async function navigate(){
     main.innerHTML='<div class="panel"><h2>Could not load this page</h2><p>'+esc(err.message)+'</p><a class="btn" href="#home">Return home</a></div>';
   }
 }
-async function showLive(ticket){
-  const data=await api('/api/live');
+async function showLive(ticket,force=false){
+  const data=await api('/api/live'+(force?'?refresh=1':''));
   if(ticket!==routeSeq)return;
   if(!data.configured){
     main.innerHTML='<div class="eyebrow">LIVE TV · CANVAS</div><h1>Live TV and sports</h1>'+
-      '<div class="panel"><h3>Connect a trusted M3U feed</h3>'+
-      '<p>Set FASTCHANNELS_M3U_URL in the Docker configuration to a FastChannels feed URL. The server will import channels and stream playable media through ffmpeg and JSMpeg, with no HTML video element. Protected ESPN+ and DIRECTV sources need an authorized bridge providing usable video.</p>'+
-      '<p class="muted">See the README for setup and security restrictions.</p></div>';
+      '<div class="panel"><h3>Connect a trusted FastChannels feed</h3>'+
+      '<p>Configure FASTCHANNELS_M3U_URL and FASTCHANNELS_EPG_URL for clear TV, and the separate FASTCHANNELS_BRIDGE_M3U_URL / FASTCHANNELS_BRIDGE_EPG_URL for hardware-bridge channels.</p>'+
+      '<p>TeStream requires an accessible media feed. A protected DRM manifest alone is not playable in JSMpeg.</p></div>';
     return;
   }
-  const list=data.channels||[];
+  const list=(data.channels||[]).sort((a,b)=>{
+    const aNumber=Number(a.channelNumber),bNumber=Number(b.channelNumber);
+    if(a.channelNumber&&b.channelNumber&&Number.isFinite(aNumber)&&Number.isFinite(bNumber)&&aNumber!==bNumber)return aNumber-bNumber;
+    return a.name.localeCompare(b.name);
+  });
+  const time=x=>new Date(x).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+  const errors=(data.errors||[]).map(x=>'<p class="muted">'+esc(x.feed)+': '+esc(x.message)+'</p>').join('');
   main.innerHTML='<div class="eyebrow">CANVAS LIVE TV</div><h1>Live TV and sports</h1>'+
-    '<p class="muted">Each channel uses ffmpeg → WebSocket → JSMpeg Canvas. DRM-only sources require an authorized upstream bridge that provides playable media.</p>'+
-    '<div class="searchBox" style="margin:20px 0 30px"><input class="input" id="filterLive" placeholder="Filter channels or sports events…" type="search">'+
-    '<span class="muted">'+list.length+' channels</span></div><div id="liveChannels"></div>';
-  const root=main.querySelector('#liveChannels'),field=main.querySelector('#filterLive');
+    '<p class="muted">MPEG-TS → JSMpeg Canvas/WebAudio. DRM-only channels require a legitimate bridge providing playable video.</p>'+
+    '<div class="liveToolbar"><input class="input" id="filterLive" placeholder="Find a channel, show or event…" type="search">'+
+    '<select id="feedFilter" class="quality" aria-label="Feed"><option value="all">All feeds</option><option value="clear">Direct</option><option value="bridge">Bridge</option></select>'+
+    '<button class="btn secondary" id="refreshLive">Refresh guide</button>'+
+    '<span class="muted">'+list.length+' channels · Capture tuners '+esc(data.tuners?.used||0)+'/'+esc(data.tuners?.max||1)+'</span></div>'+
+    (errors?'<div class="panel">'+errors+'</div>':'')+
+    '<div id="liveChannels" class="guideRows"></div>';
+  main.querySelector('#refreshLive').addEventListener('click',async()=>{
+    const button=main.querySelector('#refreshLive');if(button)button.disabled=true;
+    try{await showLive(++routeSeq,true);}
+    catch(err){toast(err.message);if(button)button.disabled=false;}
+  });
+  const root=main.querySelector('#liveChannels'),field=main.querySelector('#filterLive'),filter=main.querySelector('#feedFilter');
   const render=()=>{
-    const term=field.value.trim().toLowerCase();
-    const filtered=list.filter(x=>(x.name+' '+x.group).toLowerCase().includes(term));
-    root.innerHTML=filtered.length?'<div class="grid">'+filtered.map(x=>
-      '<button class="poster" type="button" data-channel="'+esc(x.id)+'"><div class="art" style="aspect-ratio:16/10">📺</div>'+
-      '<h3>'+esc(x.name)+'</h3><small>'+esc([x.channelNumber,x.group].filter(Boolean).join(' · '))+'</small></button>').join('')+
-      '</div>':'<p class="empty">No matching channels.</p>';
-    root.querySelectorAll('[data-channel]').forEach(btn=>btn.addEventListener('click',async()=>{
-      btn.disabled=true;
+    const term=field.value.trim().toLowerCase(),kind=filter.value;
+    const filtered=list.filter(x=>(kind==='all'||kind===x.kind)&&
+      [x.name,x.group,x.now?.title,x.next?.title].filter(Boolean).join(' ').toLowerCase().includes(term));
+    root.innerHTML=filtered.length?filtered.map(x=>{
+      const show=x.now,up=x.next;
+      const progress=show&&show.stop>show.start?Math.max(0,Math.min(100,100*(Date.now()-show.start)/(show.stop-show.start))):0;
+      return '<div class="guideRow"><div class="guideChannel">'+
+        '<span class="guideNumber">'+esc(x.channelNumber||'TV')+'</span><div><strong>'+esc(x.name)+'</strong>'+
+        '<small>'+esc(x.group||'Live')+' · '+(x.bridge?'Capture bridge':'Direct')+'</small></div></div>'+
+        '<div class="guideProgram"><strong>'+esc(show?.title||'No current guide information')+'</strong>'+
+        '<small>'+(show?time(show.start)+'–'+time(show.stop):'Live channel')+
+        (up?' · Next '+time(up.start)+': '+esc(up.title):'')+'</small>'+
+        (show?'<div class="guideTrack"><span style="width:'+progress.toFixed(1)+'%"></span></div>':'')+
+        '</div><button class="btn tiny" data-channel="'+esc(x.id)+'" type="button">▶ Watch</button></div>';
+    }).join(''):'<p class="empty">No matching channels or events.</p>';
+    root.querySelectorAll('[data-channel]').forEach(button=>button.addEventListener('click',async()=>{
+      button.disabled=true;
       try{
-        const x=await post('/api/live/select/'+encodeURIComponent(btn.dataset.channel));
-        await openPlayer({streamId:x.streamId,live:true,duration:0,seek:0,title:x.title,
-          subtitle:'Live TV · '+(x.group||'Canvas playback')});
+        const channel=await post('/api/live/select/'+encodeURIComponent(button.dataset.channel));
+        await openPlayer({streamId:channel.streamId,live:true,duration:0,seek:0,title:channel.title,
+          subtitle:'Live TV · '+(channel.group||'Canvas playback')});
       }catch(err){toast(err.message);}
-      finally{btn.disabled=false;}
+      finally{button.disabled=false;}
     }));
   };
-  field.addEventListener('input',render);render();
+  field.addEventListener('input',render);filter.addEventListener('change',render);render();
 }
+
 function showTitle(m){
   selectedMeta=m;
   const seasons=[...new Set((m.videos||[]).map(v=>v.season).filter(Number.isInteger))].sort((a,b)=>a-b);

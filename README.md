@@ -29,7 +29,7 @@ Docker publishes port 3000 only to **127.0.0.1**. To view on a different compute
 - Audio-master browser playout clock, 250 ms initial cushion, adaptive rebuffering up to 2 seconds.
 - Automatic 360p/480p/720p selection with a 512 KiB speed test and 50% bandwidth headroom, 2-second health checks, underrun/queue/video lateness step-down, conservative step-up; manual override.
 - Generated flash/beep benchmark with software-estimated A/V offset, jitter, drift and first-frame startup time.
-- Optional FastChannels-compatible M3U channel lineup in Live TV, including temporary ESPN sports-event channels when present; server-side channel selection, ffmpeg MPEG-TS relay, and JSMpeg Canvas only.
+- Optional paired FastChannels M3U + XMLTV feeds for both clear channels and supported capture bridges; now/next program guide, tuner coordination, server-only stream selection, and JSMpeg Canvas/WebAudio playback.
 - Content-hashed JavaScript/CSS assets, immutable cache headers and no-cache HTML.
 
 
@@ -43,18 +43,30 @@ Jellyfin is entirely optional, and only acts as a second authentication gate. Fo
 
 ## Canvas-only Live TV integration
 
-**The TeStream browser does not use an HTML video element for Live TV.** The Live TV tab reads the configured M3U feed server-side, lists channels/event names, and tunes a selected source through the existing ffmpeg → MPEG-TS → WebSocket → JSMpeg Canvas/WebAudio engine. Channel URLs do not appear in the API responses, only temporary opaque source IDs.
+TeStream uses no HTML video element for Live TV. FastChannels provides M3U channel metadata and XMLTV schedules, while TeStream transcodes any **accessible, unencrypted** stream through ffmpeg to JSMpeg Canvas and WebAudio. Merely importing an encrypted ESPN+/DIRECTV manifest does **not** make protected video playable.
 
-To connect a trusted FastChannels feed:
+### Feed configuration
 
-1. Install and configure FastChannels separately. Use its own official/provider sign-ins and enable only the channels you are authorized to view.
-2. Under FastChannels → Feeds, copy an M3U URL, e.g. `http://fastchannels:5523/feeds/default/m3u` for ordinary **clear** channels. To play DIRECTV/ESPN protected channels through a supported capture setup, use the **bridge-specific M3U feed** exported under FastChannels → Bridge / Feeds, not the ordinary default feed. Ensure TeStream's container can reach the selected feed.
-3. Set `FASTCHANNELS_M3U_URL=http://fastchannels:5523/feeds/default/m3u` and add exactly `fastchannels` to `STREAM_HOST_ALLOWLIST` (only when that hostname resolves to a service you control).
-4. Recreate TeStream and open Live TV.
+Install and configure FastChannels separately. Its newest documentation lists ESPN and DIRECTV STREAM account integrations and explains how a verified Android/Fire TV device + external capture hardware may provide a bridge output. You must use only provider-authorized playback and respect HDCP restrictions. FastChannels is not automatically deployed by TeStream.
 
-**A playlist is not a decryption mechanism.** DIRECTV STREAM and ESPN premium feeds generally carry Widevine-protected content. If FastChannels returns an encrypted manifest, ffmpeg cannot process it; no Canvas picture will be produced. FastChannels documents an Android/Fire TV capture workflow, but usable output depends on the device, capture hardware, HDCP enforcement, authorization, and provider restrictions. TeStream does not retrieve DRM keys, remove HDCP, or bypass licensing. Only feed accessible, unencrypted media sources into ffmpeg.
+1. In FastChannels → Feeds, copy the **actual M3U and EPG URLs** for your ordinary (clear) channels. Example default feed: `http://fastchannels:5523/feeds/default/m3u` and `http://fastchannels:5523/feeds/default/epg.xml`.
+2. If a working capture bridge is available, use FastChannels → Feeds → **Bridge outputs** and copy its **separate, actual M3U and XMLTV URLs**. Do not infer bridge endpoint names from examples.
+3. Enter URLs in TeStream's `.env` using `FASTCHANNELS_M3U_URL`, `FASTCHANNELS_EPG_URL`, `FASTCHANNELS_BRIDGE_M3U_URL`, and `FASTCHANNELS_BRIDGE_EPG_URL`. Each pair is optional.
+4. Add the FastChannels hostname to `STREAM_HOST_ALLOWLIST` **only if that hostname resolves to your trusted FastChannels instance**. TeStream's container must share a Docker network or otherwise reach that service.
+5. Leave `FASTCHANNELS_BRIDGE_TUNERS=1` for a single HDMI capture device. Increase only if your bridge truly provides multiple independent tuners. TeStream blocks competing sessions and allows same-session quality restarts without retuning another viewer.
+6. Run `docker compose up -d --build` and open Live TV. It merges the feeds, displays channel numbers plus XMLTV now/next program entries, and supports search and feed filtering. Guide failures are reported without hiding otherwise playable channels.
 
-This first integration imports M3U channel names and groups, not XMLTV guide data. Live streams have no seek bar; pause/resume or quality changes reconnect at the current live point. No ESPN or DIRECTV account credentials are entered into TeStream. Do not expose FastChannels endpoints to untrusted networks; its documentation says some playback feeds remain open even with admin authentication enabled.
+**No HTML `<video>` fallback:** When a feed is DRM-only or capture fails, show a stream error rather than silently opening a different player. Live pause/resume and quality changes reconnect at the current live point, with no seek bar.
+
+**Important provider caveats:** FastChannels' Android/Fire TV player uses the device's native DRM engine. HDCP or service restrictions may prohibit capture or redistribution. TeStream does not remove HDCP, extract license keys, decrypt protected manifests, automate unauthorized capture, or claim that a capture feed is guaranteed to work. FastChannels' normal and bridge playlists are different. The HDMI capture workflow can require Channels DVR or ah4c plus hardware; it is not a software-only switch. Keep FastChannels and bridge endpoints private, as documented playback routes may not require its admin password.
+
+Documentation: https://github.com/kineticman/FastChannels/blob/main/docs/fc-player-setup.md
+
+### Known gaps
+
+- XMLTV now/next entries are implemented; a full multi-hour grid and per-channel event recording are not yet included.
+- Actual ESPN+ or DIRECTV playback has not been validated, and no provider account credentials belong in TeStream.
+- For true display/speaker A/V latency measurements, record flash and beep externally using a camera and microphone.
 
 ## ESPN+ and DIRECTV STREAM
 
