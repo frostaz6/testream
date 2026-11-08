@@ -8,7 +8,8 @@ const exec=promisify(execFile);
 const tmp=await mkdtemp(join(tmpdir(),'testream-'));
 function run(args){
   return new Promise((resolve,reject)=>{
-    const child=spawn('ffmpeg',args,{stdio:['ignore','pipe','pipe']});
+    const child=spawn('ffmpeg',args,{stdio:['ignore','pipe','pipe','pipe']});
+    child.stdio[3].resume();
     const chunks=[];let error='';
     child.stdout.on('data',b=>chunks.push(b));
     child.stderr.on('data',b=>{error+=b;if(error.length>10000)error=error.slice(-10000);});
