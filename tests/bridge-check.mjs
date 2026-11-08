@@ -54,7 +54,8 @@ try{
   const ended=new Promise((resolve,reject)=>{
     const watchdog=setTimeout(()=>{
       worker?.stop();
-      reject(new Error('Timed out reading synthetic bridge MPEG-TS')),25000);
+      reject(new Error('Timed out reading synthetic bridge MPEG-TS'));
+    },25000);
     watchdog.unref();
     launch({url,quality:'360p',bridge:true,
       onData:b=>out.push(b),
