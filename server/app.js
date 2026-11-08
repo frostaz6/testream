@@ -191,6 +191,7 @@ server.on('upgrade',(req,socket,head)=>{
 wsServer.on('connection',async(ws,opts)=>{
   let worker=null,lastTick=Date.now(),lastBytes=0,encoder={};
   const openedAt=Date.now();
+  const firstPacketTimeoutMs=opts.source?.prismcast?120000:opts.source?.bridge?60000:45000;
   let lastMediaAt=openedAt,firstPacketMs=null;
   const send=message=>{if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(message));};
   const timer=setInterval(()=>{
@@ -204,8 +205,11 @@ wsServer.on('connection',async(ws,opts)=>{
       throughputBps:bps,uptime:worker?.age||0});
     // A successful upstream TCP connection is NOT proof of usable MPEG-TS.
     // Fail clearly if a capture tuner never produces any media.
-    if(worker?.bytes===0&&Date.now()-openedAt>45000){
-      send({type:'error',code:'NO_MEDIA',message:'Capture did not produce any media in 45 seconds. Run the FastChannels live bridge healthcheck and verify the HDMI encoder.'});
+    if(worker?.bytes===0&&Date.now()-openedAt>firstPacketTimeoutMs){
+      const detail=opts.source?.prismcast?'Check PrismCast browser login, capture health and availability.':
+        opts.source?.bridge?'Run the FastChannels live bridge healthcheck and verify the HDMI encoder.':
+          'Check the upstream source URL and connectivity.';
+      send({type:'error',code:'NO_MEDIA',message:'No media arrived within '+Math.round(firstPacketTimeoutMs/1000)+' seconds. '+detail});
       ws.close(1013,'No capture data');
     }else if(worker?.bytes>0&&Date.now()-lastMediaAt>25000){
       send({type:'error',code:'MEDIA_STALLED',message:'No media data received for 25 seconds. Check the capture encoder and DIRECTV player device.'});
