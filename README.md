@@ -29,6 +29,7 @@ Docker publishes port 3000 only to **127.0.0.1**. To view on a different compute
 - Audio-master browser playout clock, 250 ms initial cushion, adaptive rebuffering up to 2 seconds.
 - Automatic 360p/480p/720p selection with a 512 KiB speed test and 50% bandwidth headroom, 2-second health checks, underrun/queue/video lateness step-down, conservative step-up; manual override.
 - Generated flash/beep benchmark with software-estimated A/V offset, jitter, drift and first-frame startup time.
+- Optional FastChannels-compatible M3U channel lineup in Live TV, including temporary ESPN sports-event channels when present; server-side channel selection, ffmpeg MPEG-TS relay, and JSMpeg Canvas only.
 - Content-hashed JavaScript/CSS assets, immutable cache headers and no-cache HTML.
 
 
@@ -39,6 +40,21 @@ Default .env: AUTH_MODE=stremio. The browser signs in using Stremio credentials 
 Jellyfin is entirely optional, and only acts as a second authentication gate. For it, configure AUTH_MODE=jellyfin, JELLYFIN_URL=http://host.docker.internal:8096 (if Jellyfin is on the Docker host), and JELLYFIN_ALLOWLIST=username1,username2. The browser then first signs in to Jellyfin and next signs in to Stremio; Jellyfin does not need to serve any media. Jellyfin user IDs can also appear on the allowlist. The optional Jellyfin token is persisted encrypted server-side, never sent to the browser.
 
 **Security:** The default single-account Stremio mode is suitable for localhost-only use. Do not expose it publicly without first deciding on a secure HTTPS reverse proxy and authentication controls. STREMIO_ALLOWLIST does not replace a perimeter for a public service. Jellyfin login over unencrypted HTTP transmits credentials between this container and the Jellyfin server on your local network; prefer HTTPS if they are on different trusted hosts.
+
+## Canvas-only Live TV integration
+
+**The TeStream browser does not use an HTML video element for Live TV.** The Live TV tab reads the configured M3U feed server-side, lists channels/event names, and tunes a selected source through the existing ffmpeg → MPEG-TS → WebSocket → JSMpeg Canvas/WebAudio engine. Channel URLs do not appear in the API responses, only temporary opaque source IDs.
+
+To connect a trusted FastChannels feed:
+
+1. Install and configure FastChannels separately. Use its own official/provider sign-ins and enable only the channels you are authorized to view.
+2. Under FastChannels → Feeds, copy an M3U URL, e.g. `http://fastchannels:5523/feeds/default/m3u`. Ensure TeStream's container can reach it.
+3. Set `FASTCHANNELS_M3U_URL=http://fastchannels:5523/feeds/default/m3u` and add exactly `fastchannels` to `STREAM_HOST_ALLOWLIST` (only when that hostname resolves to a service you control).
+4. Recreate TeStream and open Live TV.
+
+**A playlist is not a decryption mechanism.** DIRECTV STREAM and ESPN premium feeds generally carry Widevine-protected content. If FastChannels returns an encrypted manifest, ffmpeg cannot process it; no Canvas picture will be produced. FastChannels documents an Android/Fire TV capture workflow, but usable output depends on the device, capture hardware, HDCP enforcement, authorization, and provider restrictions. TeStream does not retrieve DRM keys, remove HDCP, or bypass licensing. Only feed accessible, unencrypted media sources into ffmpeg.
+
+This first integration imports M3U channel names and groups, not XMLTV guide data. Live streams have no seek bar; pause/resume or quality changes reconnect at the current live point. No ESPN or DIRECTV account credentials are entered into TeStream. Do not expose FastChannels endpoints to untrusted networks; its documentation says some playback feeds remain open even with admin authentication enabled.
 
 ## ESPN+ and DIRECTV STREAM
 

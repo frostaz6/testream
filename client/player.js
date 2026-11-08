@@ -65,7 +65,7 @@ export class CanvasPlayback{
     this.chrome=this.root.querySelector('#playerChrome');this.diag=this.root.querySelector('#diagnostics');
     this.seekEl=this.root.querySelector('.seek');this.volumeEl=this.root.querySelector('.volume');
     this.qualityEl=this.root.querySelector('.quality');this.qualityEl.value=this.mode==='auto'?'auto':this.quality;
-    this.seekEl.disabled=!this.duration||!!this.opts.benchmark;
+    this.seekEl.disabled=!this.duration||!!this.opts.benchmark||!!this.opts.live;
     this.seekEl.addEventListener('change',()=>this.seekTo(Number(this.seekEl.value)));
     this.volumeEl.addEventListener('input',()=>{this.volume=Number(this.volumeEl.value);if(this.player)this.player.volume=this.volume;});
     this.qualityEl.addEventListener('change',async()=>{
@@ -117,7 +117,7 @@ export class CanvasPlayback{
     this.metrics.sampleRate=this.context.sampleRate;
   }
   async start(at){
-    this.paused=false;this.seeking=false;this.seekAnchor=Math.max(0,at||0);
+    this.paused=false;this.seeking=false;this.seekAnchor=this.opts.live?0:Math.max(0,at||0);
     this.startedAt=performance.now();this.cleanSince=Date.now();this.underruns=[];
     this.cushion=.25;this.hasFirstFrame=false;this.lastFrame=null;this.lastQueueHealthy=false;
     this.bench={flashes:[],beeps:[],start:this.startedAt,wasWhite:false,wasLoud:false};
@@ -235,21 +235,21 @@ export class CanvasPlayback{
   }
   pause(){
     if(this.paused)return;
-    this.seekAnchor=this.current();this.playedSeconds=0;this.paused=true;
+    this.seekAnchor=this.opts.live?0:this.current();this.playedSeconds=0;this.paused=true;
     this.player?.destroy();this.player=null;
     this.status('Paused');
     this.reportProgress();
     this.refresh();
   }
   async seekTo(time){
-    if(this.opts.benchmark||!this.duration)return;
+    if(this.opts.benchmark||this.opts.live||!this.duration)return;
     const at=clamp(time,0,Math.max(0,this.duration-1));
     this.reportProgress();
     await this.start(at);
   }
   async changeQuality(level){
     if(!levels.includes(level)||this.opts.benchmark)return;
-    const pos=this.current();
+    const pos=this.opts.live?0:this.current();
     this.quality=level;this.lastQualityChange=Date.now();
     await this.start(pos);
   }

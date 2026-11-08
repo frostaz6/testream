@@ -99,6 +99,8 @@ async function navigate(){
       main.innerHTML='<div class="eyebrow">YOUR LIBRARY</div><h1>'+
         (type==='movie'?'Movies':type==='series'?'Series':'All titles')+'</h1>'+
         section('Browse',items,'Nothing in your Stremio library yet.');
+    }else if(page==='live'){
+      await showLive(ticket);
     }else if(page==='search'){
       main.innerHTML='<div class="eyebrow">DISCOVER</div><h1>Find a title</h1>'+
         '<form id="searchForm" class="searchBox"><input id="query" class="input" type="search" placeholder="Movies, series, episodes…" maxlength="100" required>'+
@@ -123,6 +125,41 @@ async function navigate(){
     if(ticket!==routeSeq)return;
     main.innerHTML='<div class="panel"><h2>Could not load this page</h2><p>'+esc(err.message)+'</p><a class="btn" href="#home">Return home</a></div>';
   }
+}
+async function showLive(ticket){
+  const data=await api('/api/live');
+  if(ticket!==routeSeq)return;
+  if(!data.configured){
+    main.innerHTML='<div class="eyebrow">LIVE TV · CANVAS</div><h1>Live TV and sports</h1>'+
+      '<div class="panel"><h3>Connect a trusted M3U feed</h3>'+
+      '<p>Set FASTCHANNELS_M3U_URL in the Docker configuration to a FastChannels feed URL. The server will import channels and stream playable media through ffmpeg and JSMpeg, with no HTML video element. Protected ESPN+ and DIRECTV sources need an authorized bridge providing usable video.</p>'+
+      '<p class="muted">See the README for setup and security restrictions.</p></div>';
+    return;
+  }
+  const list=data.channels||[];
+  main.innerHTML='<div class="eyebrow">CANVAS LIVE TV</div><h1>Live TV and sports</h1>'+
+    '<p class="muted">Each channel uses ffmpeg → WebSocket → JSMpeg Canvas. DRM-only sources require an authorized upstream bridge that provides playable media.</p>'+
+    '<div class="searchBox" style="margin:20px 0 30px"><input class="input" id="filterLive" placeholder="Filter channels or sports events…" type="search">'+
+    '<span class="muted">'+list.length+' channels</span></div><div id="liveChannels"></div>';
+  const root=main.querySelector('#liveChannels'),field=main.querySelector('#filterLive');
+  const render=()=>{
+    const term=field.value.trim().toLowerCase();
+    const filtered=list.filter(x=>(x.name+' '+x.group).toLowerCase().includes(term));
+    root.innerHTML=filtered.length?'<div class="grid">'+filtered.map(x=>
+      '<button class="poster" type="button" data-channel="'+esc(x.id)+'"><div class="art" style="aspect-ratio:16/10">📺</div>'+
+      '<h3>'+esc(x.name)+'</h3><small>'+esc([x.channelNumber,x.group].filter(Boolean).join(' · '))+'</small></button>').join('')+
+      '</div>':'<p class="empty">No matching channels.</p>';
+    root.querySelectorAll('[data-channel]').forEach(btn=>btn.addEventListener('click',async()=>{
+      btn.disabled=true;
+      try{
+        const x=await post('/api/live/select/'+encodeURIComponent(btn.dataset.channel));
+        await openPlayer({streamId:x.streamId,live:true,duration:0,seek:0,title:x.title,
+          subtitle:'Live TV · '+(x.group||'Canvas playback')});
+      }catch(err){toast(err.message);}
+      finally{btn.disabled=false;}
+    }));
+  };
+  field.addEventListener('input',render);render();
 }
 function showTitle(m){
   selectedMeta=m;
