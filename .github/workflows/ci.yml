@@ -1,0 +1,22 @@
+name: Test and build
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: node:22-trixie-slim
+    steps:
+      - uses: actions/checkout@v4
+      - run: apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates
+      - run: npm install --no-audit --no-fund
+      - run: npm test
+      - run: npm run build
+      - run: npm run test:media
+      - run: npm run test:bridge
+  docker-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: SESSION_SECRET=CI_TEST_PLACEHOLDER_WITH_MORE_THAN_32_CHARACTERS docker compose config --quiet
+      - run: SESSION_SECRET=CI_TEST_PLACEHOLDER_WITH_MORE_THAN_32_CHARACTERS docker compose --profile fastchannels config --quiet
+      - run: SESSION_SECRET=CI_TEST_PLACEHOLDER_WITH_MORE_THAN_32_CHARACTERS docker compose --profile prismcast config --quiet
+      - run: docker build --tag testream:ci .

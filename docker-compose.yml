@@ -1,0 +1,73 @@
+services:
+  testream:
+    build: .
+    image: testream:local
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      PORT: "3000"
+      HOST: "0.0.0.0"
+      DATA_DIR: "/app/data"
+      SESSION_SECRET: "${SESSION_SECRET:?Set SESSION_SECRET in .env}"
+      AUTH_MODE: "${AUTH_MODE:-stremio}"
+      STREMIO_ALLOWLIST: "${STREMIO_ALLOWLIST:-}"
+      JELLYFIN_URL: "${JELLYFIN_URL:-}"
+      JELLYFIN_ALLOWLIST: "${JELLYFIN_ALLOWLIST:-}"
+      STREAM_HOST_ALLOWLIST: "${STREAM_HOST_ALLOWLIST:-}"
+      FASTCHANNELS_M3U_URL: "${FASTCHANNELS_M3U_URL:-}"
+      FASTCHANNELS_EPG_URL: "${FASTCHANNELS_EPG_URL:-}"
+      FASTCHANNELS_BRIDGE_M3U_URL: "${FASTCHANNELS_BRIDGE_M3U_URL:-}"
+      PRISMCAST_M3U_URL: "${PRISMCAST_M3U_URL:-}"
+      FASTCHANNELS_BRIDGE_EPG_URL: "${FASTCHANNELS_BRIDGE_EPG_URL:-}"
+      FASTCHANNELS_BRIDGE_TUNERS: "${FASTCHANNELS_BRIDGE_TUNERS:-1}"
+      TRUST_PROXY: "${TRUST_PROXY:-false}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - testream-data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: 2g
+
+  fastchannels:
+    profiles: [fastchannels]
+    image: ghcr.io/kineticman/fastchannels:latest
+    restart: unless-stopped
+    ports:
+      - "${FASTCHANNELS_BIND_IP:-127.0.0.1}:5523:5523"
+    environment:
+      PUBLIC_BASE_URL: "${FASTCHANNELS_PUBLIC_BASE_URL:-http://fastchannels:5523}"
+    volumes:
+      - fastchannels-data:/data
+      - fastchannels-adb:/root/.android
+    security_opt:
+      - no-new-privileges:true
+
+  prismcast:
+    profiles: [prismcast]
+    image: ghcr.io/hjdhjd/prismcast:latest
+    restart: unless-stopped
+    shm_size: "2gb"
+    ports:
+      - "127.0.0.1:5589:5589"
+      - "127.0.0.1:6080:6080"
+    environment:
+      PORT: "5589"
+      NOVNC_PORT: "6080"
+      HDHR_ENABLED: "false"
+      SCREEN_WIDTH: "1920"
+      SCREEN_HEIGHT: "1080"
+      SCREEN_DEPTH: "24"
+    volumes:
+      - prismcast-data:/root/.prismcast
+
+volumes:
+  testream-data:
+  fastchannels-data:
+  fastchannels-adb:
+  prismcast-data:

@@ -1,0 +1,26 @@
+{
+  "name": "testream",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "node server/app.js",
+    "dev": "node scripts/build.mjs && node server/app.js",
+    "test": "node --test tests/*.test.js",
+    "test:media": "node tests/ffmpeg-check.mjs",
+    "test:bridge": "node tests/bridge-check.mjs"
+  },
+  "dependencies": {
+    "@cycjimmy/jsmpeg-player": "6.1.2",
+    "express": "^5.1.0",
+    "ws": "^8.18.3",
+    "fast-xml-parser": "^5.12.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12"
+  }
+}
