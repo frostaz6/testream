@@ -60,7 +60,7 @@ Troubleshooting: `docker compose logs -f testream`. Source IDs are transient; re
 
 ## Security boundaries
 
-- SESSION_SECRET of at least 32 characters encrypts the server-side store in ./data. Keep the secret and volume private; losing the secret invalidates all sessions.
+- SESSION_SECRET of at least 32 characters encrypts the server-side store in the Docker volume testream-data. Keep the secret and volume private; losing the secret invalidates all sessions.
 - Plex account allowlist is mandatory. Plex PIN sign-in is verified with Plex. Passwords are never persisted.
 - Cookie is HttpOnly + SameSite=Lax. Secure is set only when HTTPS is correctly detected through configured TRUST_PROXY=true. Reverse-proxy exposure requires a separate security review.
 - ffmpeg and ffprobe use spawn with argv; no shell.
