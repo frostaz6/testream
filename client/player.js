@@ -73,7 +73,7 @@ export class CanvasPlayback{
       const next=this.mode==='auto'?await this.bestQuality():this.qualityEl.value;
       if(next!==this.quality)await this.changeQuality(next);
     });
-    this.root.addEventListener('click',ev=>{
+    this.root.onclick=ev=>{
       const action=ev.target.closest('[data-action]')?.dataset.action;
       if(action==='exit')this.opts.onClose?.();
       if(action==='toggle')this.toggle();
@@ -82,12 +82,12 @@ export class CanvasPlayback{
       if(action==='mute'){this.volume=this.volume?0:.85;this.volumeEl.value=this.volume;if(this.player)this.player.volume=this.volume;}
       if(action==='fullscreen'){const el=this.root;if(document.fullscreenElement)document.exitFullscreen();else el.requestFullscreen?.().catch(()=>{});}
       if(action==='stats')this.diag.hidden=!this.diag.hidden;
-    });
+    };
     let hideTimer;const show=()=>{
       this.chrome.classList.remove('hidden');clearTimeout(hideTimer);
       hideTimer=setTimeout(()=>{if(!this.paused)this.chrome.classList.add('hidden');},3200);
     };
-    this.root.addEventListener('pointermove',show);this.root.addEventListener('pointerdown',show);
+    this.root.onpointermove=show;this.root.onpointerdown=show;
   }
   status(text){this.statusEl.textContent=text;this.statusEl.classList.toggle('show',!!text);}
   async speed(){
@@ -313,6 +313,6 @@ export class CanvasPlayback{
     clearInterval(this.healthTimer);clearInterval(this.progressTimer);clearInterval(this.uiTimer);
     clearInterval(this.analyserTimer);window.removeEventListener('testream:ws-status',this.statusListener);
     this.player?.destroy();this.player=null;
-    this.silentGain?.disconnect();this.root.innerHTML='';
+    this.silentGain?.disconnect();this.root.onclick=null;this.root.onpointermove=null;this.root.onpointerdown=null;this.root.innerHTML='';
   }
 }
