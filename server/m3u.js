@@ -4,7 +4,11 @@ function attr(extinf,name){
   return extinf.match(pattern)?.[1]?.slice(0,250)||'';
 }
 
-export function identifyProvider(value){
+export function identifyProvider(value,tvgId='',group=''){
+  const label=String(tvgId||'').split('.')[0].toLowerCase();
+  if(label==='directv')return 'DIRECTV STREAM';
+  if(label==='espn')return 'ESPN';
+  if(/directv/i.test(String(group||'')))return 'DIRECTV STREAM';
   try{
     const pathname=decodeURIComponent(new URL(value).pathname);
     // Only source-owned FastChannels proxy paths are used for this label.
@@ -34,7 +38,7 @@ export function parsePlaylist(body,base){
     const name=(meta.slice(meta.indexOf(',')+1)||attr(meta,'tvg-name')||'Unnamed channel').slice(0,160).trim();
     const id=crypto.createHash('sha256').update(u.href).update('\0').update(name).digest('hex').slice(0,24);
     channels.push({id,name,group:attr(meta,'group-title'),channelNumber:attr(meta,'tvg-chno'),
-      tvgId:attr(meta,'tvg-id'),provider:identifyProvider(u.href),url:u.href});
+      tvgId:attr(meta,'tvg-id'),provider:identifyProvider(u.href,attr(meta,'tvg-id')||attr(meta,'channel-id'),attr(meta,'group-title')),url:u.href});
     meta='';
     if(channels.length>=3000)break;
   }

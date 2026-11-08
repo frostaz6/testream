@@ -199,7 +199,7 @@ wsServer.on('connection',async(ws,opts)=>{
     const nowBytes=worker?.bytes||0;
     const bps=Math.max(0,(nowBytes-lastBytes)/Math.max(.01,delta));lastBytes=nowBytes;
     const bytesPerSecond=bitrate(opts.quality)*1000/8;
-    send({...encoder,type:'status',quality:opts.quality,source:opts.source?.bridge?'capture-bridge':opts.source?.live?'live':'stremio',
+    send({...encoder,type:'status',quality:opts.quality,source:opts.source?.bridge?'capture-bridge':opts.source?.prismcast?'prismcast':opts.source?.live?'live':'stremio',
       firstPacketMs,bufferedBytes:ws.bufferedAmount,bufferedSeconds:ws.bufferedAmount/bytesPerSecond,
       throughputBps:bps,uptime:worker?.age||0});
     // A successful upstream TCP connection is NOT proof of usable MPEG-TS.

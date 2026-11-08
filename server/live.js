@@ -8,7 +8,9 @@ import {parseGuide,currentPrograms} from './xmltv.js';
 // FastChannels and MUST NOT be inferred from the ordinary feed URL.
 const feeds=[
   {kind:'clear',m3u:process.env.FASTCHANNELS_M3U_URL,epg:process.env.FASTCHANNELS_EPG_URL},
-  {kind:'bridge',m3u:process.env.FASTCHANNELS_BRIDGE_M3U_URL,epg:process.env.FASTCHANNELS_BRIDGE_EPG_URL}
+  {kind:'bridge',m3u:process.env.FASTCHANNELS_BRIDGE_M3U_URL,epg:process.env.FASTCHANNELS_BRIDGE_EPG_URL},
+  // PrismCast can export its own M3U via /playlist and serve HLS directly.
+  {kind:'prismcast',m3u:process.env.PRISMCAST_M3U_URL,epg:''}
 ].filter(f=>f.m3u?.trim()).map(f=>({kind:f.kind,m3u:f.m3u.trim(),epg:f.epg?.trim()||''}));
 const CACHE_MS=60_000,GUIDE_CACHE_MS=5*60_000,MAX_M3U_BYTES=3_000_000,MAX_XMLTV_BYTES=18_000_000;
 const cache=new Map(),guideCache=new Map();
@@ -60,7 +62,7 @@ async function loadFeed(feed,force){
         // Channel ids have a feed-specific prefix in their hash, so a clear
         // feed and a capture bridge feed can coexist without collisions.
         const id=crypto.createHash('sha256').update(feed.kind).update(':').update(channel.id).digest('hex').slice(0,24);
-        channels.push({...channel,id,kind:feed.kind,bridge:feed.kind==='bridge'});
+        channels.push({...channel,id,kind:feed.kind,bridge:feed.kind==='bridge',prismcast:feed.kind==='prismcast'});
       }catch{}
     }
     cache.set(feed.kind,{at:Date.now(),value:channels});
@@ -118,7 +120,7 @@ export async function lineup(force=false,at=Date.now()){
     const {now,next}=currentPrograms(events,at);
     // Do not return stream URLs or session tokens in channel listings.
     return {id:c.id,name:c.name,group:c.group,channelNumber:c.channelNumber,
-      tvgId:c.tvgId,provider:c.provider,kind:c.kind,bridge:c.bridge,now,next};
+      tvgId:c.tvgId,provider:c.provider,kind:c.kind,bridge:c.bridge,prismcast:c.prismcast,now,next};
   })};
 }
 
@@ -129,7 +131,7 @@ export async function select(session,id){
   if(!channel)throw new Error('Channel unavailable; reload the guide');
   await safeUrl(channel.url);
   const streamId=opaque(session.streams,
-    {url:channel.url,type:'live',videoId:channel.id,live:true,bridge:channel.bridge},3600000);
+    {url:channel.url,type:'live',videoId:channel.id,live:true,bridge:channel.bridge,prismcast:channel.prismcast},3600000);
   persist(session);
   return {streamId,title:channel.name,group:channel.group,bridge:channel.bridge};
 }
