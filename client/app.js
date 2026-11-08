@@ -2,7 +2,7 @@ import {CanvasPlayback} from './player.js';
 import {measureBenchmarks} from './benchmark.js';
 const main=document.getElementById('content'),overlay=document.getElementById('overlay');
 const badge=document.getElementById('userBadge'),nav=document.getElementById('links');
-let session=null,activePlayer=null,selectedMeta=null,pendingSources=[],routeSeq=0,plexPoll=null,lastBenchmark=null;
+let session=null,activePlayer=null,selectedMeta=null,pendingSources=[],routeSeq=0,lastBenchmark=null;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const api=async(url,opts={})=>{
   const resp=await fetch(url,{credentials:'same-origin',...opts,headers:opts.body?{'content-type':'application/json'}:{}});
@@ -37,35 +37,28 @@ function section(title,items,empty){
 function loading(){main.innerHTML='<div class="loader">Loading…</div>';}
 function activeLinks(route){
   nav.querySelectorAll('[data-page]').forEach(a=>a.classList.toggle('active',a.dataset.page===route));
-  badge.textContent=session?.plex?.username||'';
+  badge.textContent=session?.jellyfin?.username||session?.stremio?.email||'';
 }
-function showSignIn(){
+function showJellyfinSignIn(){
   activeLinks('');
-  main.innerHTML='<div class="panel authPanel"><div class="eyebrow">PRIVATE STREAMING</div>'+
-    '<h1>Welcome to TeStream</h1>'+
-    '<p>Sign in with an approved Plex account first. Only Plex usernames/emails on your server allowlist can access this player.</p>'+
-    '<button class="btn" id="plexStart">Connect Plex account</button>'+
-    '<div id="plexStep" class="panel" hidden></div></div>'+externalProviders();
-  main.querySelector('#plexStart').addEventListener('click',async()=>{
-    try{
-      const data=await post('/api/plex/start');
-      const step=main.querySelector('#plexStep');step.hidden=false;
-      step.innerHTML='<p>Complete sign-in using Plex, then return to this tab.</p>'+
-        '<a class="btn" rel="noopener noreferrer" target="_blank" href="'+esc(data.url)+'">Open Plex sign-in ↗</a>'+
-        '<p class="muted" id="plexPolling">Checking for approval…</p>';
-      clearInterval(plexPoll);
-      plexPoll=setInterval(async()=>{
-        try{
-          const result=await api('/api/plex/poll');
-          if(!result.pending){clearInterval(plexPoll);await init();toast('Plex verified');}
-        }catch(err){clearInterval(plexPoll);step.querySelector('#plexPolling').textContent=err.message;}
-      },2000);
-    }catch(err){toast(err.message);}
+  main.innerHTML='<div class="panel authPanel"><div class="eyebrow">OPTIONAL ACCESS CONTROL</div>'+
+    '<h1>Sign in with Jellyfin</h1>'+
+    '<p>This TeStream installation requires an approved Jellyfin account before connecting Stremio. Jellyfin is used only to authenticate viewers, not for video playback.</p>'+
+    '<form id="jellyfinForm" class="form">'+
+    '<input required type="text" name="username" autocomplete="username" placeholder="Jellyfin username">'+
+    '<input required type="password" name="password" autocomplete="current-password" placeholder="Jellyfin password">'+
+    '<button class="btn" type="submit">Connect Jellyfin</button></form></div>';
+  main.querySelector('#jellyfinForm').addEventListener('submit',async event=>{
+    event.preventDefault();
+    const form=event.currentTarget,username=form.elements.username.value,password=form.elements.password.value;
+    form.elements.password.value='';
+    try{await post('/api/jellyfin/login',{username,password});await init();toast('Jellyfin verified');}
+    catch(err){toast(err.message);}
   });
 }
 function showStremioSignIn(){
   activeLinks('');
-  main.innerHTML='<div class="panel authPanel"><div class="eyebrow">PLEX VERIFIED · '+esc(session.plex.username)+'</div>'+
+  main.innerHTML='<div class="panel authPanel"><div class="eyebrow">STREMIO LIBRARY ACCESS</div>'+
     '<h1>Connect Stremio</h1><p>Your Stremio token stays encrypted on the server. The browser receives only an HttpOnly session cookie.</p>'+
     '<form id="stremioForm" class="form"><input required type="email" name="email" placeholder="Stremio email" autocomplete="username">'+
     '<input required type="password" name="password" placeholder="Stremio password" autocomplete="current-password">'+
@@ -80,12 +73,12 @@ function showStremioSignIn(){
 }
 async function init(){
   session=await api('/api/session');
-  if(!session.plex){showSignIn();return;}
+  if(session.authMode==='jellyfin'&&!session.jellyfin){showJellyfinSignIn();return;}
   if(!session.stremio){showStremioSignIn();return;}
   await navigate();
 }
 async function navigate(){
-  if(!session?.plex||!session?.stremio)return;
+  if(!session?.stremio||(session.authMode==='jellyfin'&&!session.jellyfin))return;
   const route=decodeURIComponent((location.hash||'#home').slice(1));
   const parts=route.split('/'),page=parts[0]||'home',ticket=++routeSeq;
   activeLinks(page);loading();
@@ -223,7 +216,7 @@ window.addEventListener('visibilitychange',()=>{
 });
 window.addEventListener('unhandledrejection',event=>{console.error(event.reason);toast(event.reason?.message||'Unexpected error');});
 document.getElementById('userBadge').addEventListener('click',async()=>{
-  if(!session?.plex)return;
+  if(!session?.stremio&&!session?.jellyfin)return;
   if(confirm('Sign out of TeStream on this browser?')){await post('/api/logout');location.hash='#home';await init();}
 });
 init().catch(e=>{main.textContent='Could not connect to TeStream: '+e.message;});

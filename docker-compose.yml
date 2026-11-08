@@ -11,9 +11,14 @@ services:
       HOST: "0.0.0.0"
       DATA_DIR: "/app/data"
       SESSION_SECRET: "${SESSION_SECRET:?Set SESSION_SECRET in .env}"
-      PLEX_ALLOWLIST: "${PLEX_ALLOWLIST:?Set Plex username/email allowlist}"
+      AUTH_MODE: "${AUTH_MODE:-stremio}"
+      STREMIO_ALLOWLIST: "${STREMIO_ALLOWLIST:-}"
+      JELLYFIN_URL: "${JELLYFIN_URL:-}"
+      JELLYFIN_ALLOWLIST: "${JELLYFIN_ALLOWLIST:-}"
       STREAM_HOST_ALLOWLIST: "${STREAM_HOST_ALLOWLIST:-}"
       TRUST_PROXY: "${TRUST_PROXY:-false}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - testream-data:/app/data
     security_opt:

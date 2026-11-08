@@ -8,7 +8,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {ensureSession,readSession,publicUser,persist,revoke} from './sessions.js';
-import {startPin,completePin,allowed} from './plex.js';
+import {authMode,jellyfinAuthorized} from './access.js';
+import * as jellyfin from './jellyfin.js';
 import * as stremio from './stremio.js';
 import {safeUrl} from './net.js';
 import {qualities,bitrate,launch} from './ffmpeg.js';
@@ -36,50 +37,64 @@ const respond=handler=>(req,res)=>Promise.resolve().then(()=>handler(req,res)).c
   console.warn(req.path,err.message);
   if(!res.headersSent)res.status(/sign in|allowlist|Unauthorized/i.test(err.message)?403:400).json({error:err.message});
 });
-function plexGuard(req,res,next){
-  if(!req.session.plex||!allowed(req.session.plex))return res.status(403).json({error:'Plex sign-in required; account must match PLEX_ALLOWLIST'});
+function gateGuard(req,res,next){
+  if(!jellyfinAuthorized(req.session))return res.status(403).json({error:'Jellyfin login is required for this installation'});
   next();
 }
 function stremioGuard(req,res,next){
+  if(!jellyfinAuthorized(req.session))return res.status(403).json({error:'Jellyfin login required'});
   if(!req.session.stremio)return res.status(401).json({error:'Sign in to Stremio first'});
+  next();
+}
+// Short-window defense against accidental credential brute-force, including when proxied.
+const attempts=new Map();
+function loginLimit(req,res,next){
+  const key=req.socket.remoteAddress||'unknown',now=Date.now();
+  const saved=(attempts.get(key)||[]).filter(t=>now-t<300000);
+  if(saved.length>=12)return res.status(429).json({error:'Too many login attempts. Try again in five minutes.'});
+  saved.push(now);attempts.set(key,saved);
+  if(attempts.size>1000)for(const [k,v] of attempts)if(v.at(-1)<now-300000)attempts.delete(k);
   next();
 }
 app.get('/api/health',(_,res)=>res.json({status:'ok',ffmpeg:'7+ required'}));
 app.get('/api/session',(req,res)=>res.json(publicUser(req.session)));
-app.post('/api/plex/start',respond(async(req,res)=>{
-  const result=await startPin(req.session);persist(req.session);res.json(result);
+app.post('/api/jellyfin/login',loginLimit,respond(async(req,res)=>{
+  if(authMode!=='jellyfin')return res.status(404).json({error:'Jellyfin authentication is disabled'});
+  const {username,password}=req.body||{};
+  res.json(await jellyfin.signIn(req.session,username,password));
 }));
-app.get('/api/plex/poll',respond(async(req,res)=>{
-  const result=await completePin(req.session);persist(req.session);res.json(result);
+app.post('/api/logout',respond(async(req,res)=>{
+  if(req.session.stremio)await stremio.signOut(req.session);
+  if(req.session.jellyfin)await jellyfin.signOut(req.session);
+  revoke(req.session,res);res.json({ok:true});
 }));
-app.post('/api/logout',respond(async(req,res)=>{revoke(req.session,res);res.json({ok:true});}));
-app.post('/api/stremio/login',plexGuard,respond(async(req,res)=>{
+app.post('/api/stremio/login',loginLimit,gateGuard,respond(async(req,res)=>{
   const {email,password}=req.body||{};
   if(typeof email!=='string'||typeof password!=='string'||!email.includes('@')||password.length>500)throw new Error('Enter valid Stremio credentials');
   res.json(await stremio.signIn(req.session,email,password));
 }));
-app.post('/api/stremio/logout',plexGuard,respond(async(req,res)=>{
+app.post('/api/stremio/logout',gateGuard,respond(async(req,res)=>{
   await stremio.signOut(req.session);res.json({ok:true});
 }));
-app.get('/api/home',plexGuard,stremioGuard,respond(async(req,res)=>res.json(await stremio.home(req.session))));
-app.get('/api/library',plexGuard,stremioGuard,respond(async(req,res)=>res.json(await stremio.libraryPage(req.session,req.query.type))));
-app.get('/api/search',plexGuard,stremioGuard,respond(async(req,res)=>res.json(await stremio.search(req.session,String(req.query.q||'')))));
-app.get('/api/meta/:type/:id',plexGuard,stremioGuard,respond(async(req,res)=>{
+app.get('/api/home',stremioGuard,respond(async(req,res)=>res.json(await stremio.home(req.session))));
+app.get('/api/library',stremioGuard,respond(async(req,res)=>res.json(await stremio.libraryPage(req.session,req.query.type))));
+app.get('/api/search',stremioGuard,respond(async(req,res)=>res.json(await stremio.search(req.session,String(req.query.q||'')))));
+app.get('/api/meta/:type/:id',stremioGuard,respond(async(req,res)=>{
   res.json(await stremio.meta(req.session,req.params.type,req.params.id));
 }));
-app.get('/api/streams',plexGuard,stremioGuard,respond(async(req,res)=>{
+app.get('/api/streams',stremioGuard,respond(async(req,res)=>{
   const type=String(req.query.type||''),id=String(req.query.videoId||'');
   if(!type||!id||type.length>50||id.length>200)throw new Error('Missing video ID');
   res.json(await stremio.streams(req.session,type,id));
 }));
-app.post('/api/progress',plexGuard,stremioGuard,respond(async(req,res)=>{
+app.post('/api/progress',stremioGuard,respond(async(req,res)=>{
   const data=req.body||{};
   const valid={id:String(data.id||''),videoId:String(data.videoId||''),
     position:Number(data.position),duration:Number(data.duration)};
   if(valid.id.length>200||valid.videoId.length>200)throw new Error('Invalid item');
   await stremio.progress(req.session,valid);res.json({ok:true});
 }));
-app.get('/api/poster/:id',plexGuard,stremioGuard,respond(async(req,res)=>{
+app.get('/api/poster/:id',stremioGuard,respond(async(req,res)=>{
   let u=stremio.selectedPoster(req.session,req.params.id);
   if(!u)return res.status(404).end();
   for(let i=0;i<4;i++){
@@ -101,14 +116,14 @@ app.get('/api/poster/:id',plexGuard,stremioGuard,respond(async(req,res)=>{
   }
   throw new Error('Too many poster redirects');
 }));
-app.get('/api/speedtest',plexGuard,(req,res)=>{
+app.get('/api/speedtest',stremioGuard,(req,res)=>{
   const data=crypto.randomBytes(512*1024);
   res.setHeader('Content-Type','application/octet-stream');
   res.setHeader('Content-Length',data.length);
   res.setHeader('Cache-Control','no-store');
   res.end(data);
 });
-app.get('/api/probe',plexGuard,stremioGuard,respond(async(req,res)=>{
+app.get('/api/probe',stremioGuard,respond(async(req,res)=>{
   const source=stremio.selectedStream(req.session,String(req.query.streamId||''));
   if(!source)throw new Error('Stream expired; select a source again');
   await safeUrl(source.url);
@@ -132,7 +147,7 @@ server.on('upgrade',(req,socket,head)=>{
     if(origin&&new URL(origin).host!==req.headers.host)throw new Error('Origin mismatch');
     const raw=(req.headers.cookie||'').match(/(?:^|;\s*)tesstream=([^;]+)/)?.[1];
     const session=readSession(raw?decodeURIComponent(raw):'');
-    if(!session?.plex||!allowed(session.plex))throw new Error('Plex authentication required');
+    if(!session||!session.stremio||!jellyfinAuthorized(session))throw new Error('Sign-in required');
     const u=new URL(req.url,'http://localhost');
     if(u.pathname!=='/ws')throw new Error('Not found');
     const bench=u.searchParams.get('benchmark')==='1';

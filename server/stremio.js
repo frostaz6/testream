@@ -1,5 +1,6 @@
 import {getJson,safeUrl} from './net.js';
 import {opaque,resolve,persist} from './sessions.js';
+import {stremioAllowed} from './access.js';
 const API='https://api.strem.io/api/';
 const CINEMETA='https://v3-cinemeta.strem.io/';
 async function call(method,body){
@@ -13,6 +14,7 @@ async function call(method,body){
 export async function signIn(session,email,password){
   const data=await call('login',{email,password});
   if(!data?.authKey)throw new Error('Stremio did not return an auth key');
+  if(!stremioAllowed(data.user?.email||''))throw new Error('This Stremio account is not on STREMIO_ALLOWLIST');
   session.stremio={authKey:data.authKey,user:data.user||{email}};
   delete session.cachedLibrary;delete session.cachedAddons;
   persist(session);

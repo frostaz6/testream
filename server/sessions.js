@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import {authMode,jellyfinAuthorized} from './access.js';
 const secret=process.env.SESSION_SECRET||'';
 if(secret.length<32) throw new Error('SESSION_SECRET must contain at least 32 random characters');
 const key=crypto.createHash('sha256').update(secret).digest();
@@ -42,7 +43,9 @@ export function ensureSession(req,res){
 export function persist(session){session.expires=Date.now()+7*86400e3;save();}
 export function revoke(session,res){sessions.delete(session.id);res.clearCookie('tesstream',{path:'/'});save();}
 export function publicUser(session){
-  return {plex:session.plex?{username:session.plex.username,email:session.plex.email}:null,
+  return {authMode,
+    jellyfin:jellyfinAuthorized(session)&&authMode==='jellyfin'
+      ? {username:session.jellyfin.username}:null,
     stremio:session.stremio?{email:session.stremio.user?.email||''}:null};
 }
 export function opaque(map,value,ttl=7200000){

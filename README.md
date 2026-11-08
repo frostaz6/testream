@@ -2,15 +2,15 @@
 
 Self-hosted, Dockerized Stremio library + MPEG-TS player using **Express, ws, ffmpeg 7+ and @cycjimmy/jsmpeg-player**. The browser has **no HTML video element**: MPEG-1 frames are rendered on a canvas and MP2 audio plays through WebAudio. Separate viewers get separate ffmpeg processes.
 
-> **Status:** early implementation; integration testing required. Synthetic encoder checks passed locally. Actual Stremio playback on the owner's Plex host has not yet been tested.
+> **Status:** early implementation; integration testing required. Synthetic encoder checks passed locally. Actual Stremio playback on the intended Docker host has not yet been tested.
 
-## Install on the machine running Plex
+## Install on any Docker host
 
 1. Clone the repository and check out the feature branch while its pull request is open.
 2. Copy the example environment: `cp .env.example .env`.
-3. Run `openssl rand -hex 32` and paste the output into SESSION_SECRET. Set PLEX_ALLOWLIST to your approved Plex usernames and/or account emails. Never commit .env.
+3. Run `openssl rand -hex 32` and paste the output into SESSION_SECRET. The default AUTH_MODE=stremio requires no Plex or Jellyfin installation. Optionally set STREMIO_ALLOWLIST to limit which Stremio email addresses may sign in. Never commit .env.
 4. Start: `docker compose up -d --build`.
-5. Open http://127.0.0.1:3000 on your Plex host. Complete Plex verification and then Stremio sign-in.
+5. Open http://127.0.0.1:3000 on your Docker host and sign in to Stremio.
 
 Docker publishes port 3000 only to **127.0.0.1**. To view on a different computer while keeping it private, use an SSH port forward, for example `ssh -L 3000:127.0.0.1:3000 user@plex-host` and browse http://127.0.0.1:3000.
 
@@ -19,7 +19,7 @@ Docker publishes port 3000 only to **127.0.0.1**. To view on a different compute
 ## Features
 
 - Stremio sign-in via Stremio's account login API. Its authKey is stored only in the AES-256-GCM encrypted server-side session store. The browser receives only an opaque HttpOnly cookie.
-- Plex PIN login via Plex, checked server-side against PLEX_ALLOWLIST by username or email.
+- No Plex dependency. Default login is Stremio, optionally checked against STREMIO_ALLOWLIST. Optional AUTH_MODE=jellyfin adds a Jellyfin username/password login and server-enforced JELLYFIN_ALLOWLIST before Stremio login.
 - Home (Continue Watching / Recently Added), Movies, Series, Search, show detail pages with seasons and episodes. Every library request and poster is proxied.
 - Installed Stremio add-ons supply direct HTTP media choices. The browser receives only opaque source IDs.
 - One WebSocket and one ffmpeg subprocess per viewer. MPEG-TS is binary; status and metrics are JSON text frames, filtered before JSMpeg processes data.
@@ -30,6 +30,15 @@ Docker publishes port 3000 only to **127.0.0.1**. To view on a different compute
 - Automatic 360p/480p/720p selection with a 512 KiB speed test and 50% bandwidth headroom, 2-second health checks, underrun/queue/video lateness step-down, conservative step-up; manual override.
 - Generated flash/beep benchmark with software-estimated A/V offset, jitter, drift and first-frame startup time.
 - Content-hashed JavaScript/CSS assets, immutable cache headers and no-cache HTML.
+
+
+## Authentication (no Plex needed)
+
+Default .env: AUTH_MODE=stremio. The browser signs in using Stremio credentials over the locally bound HTTP service; the Stremio auth token remains server-side. You can set STREMIO_ALLOWLIST to comma-separated Stremio email addresses for an extra authorization rule. If Stremio does not return a verified email address, the allowlist refuses access rather than trusting the entered username.
+
+Jellyfin is entirely optional, and only acts as a second authentication gate. For it, configure AUTH_MODE=jellyfin, JELLYFIN_URL=http://host.docker.internal:8096 (if Jellyfin is on the Docker host), and JELLYFIN_ALLOWLIST=username1,username2. The browser then first signs in to Jellyfin and next signs in to Stremio; Jellyfin does not need to serve any media. Jellyfin user IDs can also appear on the allowlist. The optional Jellyfin token is persisted encrypted server-side, never sent to the browser.
+
+**Security:** The default single-account Stremio mode is suitable for localhost-only use. Do not expose it publicly without first deciding on a secure HTTPS reverse proxy and authentication controls. STREMIO_ALLOWLIST does not replace a perimeter for a public service. Jellyfin login over unencrypted HTTP transmits credentials between this container and the Jellyfin server on your local network; prefer HTTPS if they are on different trusted hosts.
 
 ## ESPN+ and DIRECTV STREAM
 
@@ -61,7 +70,7 @@ Troubleshooting: `docker compose logs -f testream`. Source IDs are transient; re
 ## Security boundaries
 
 - SESSION_SECRET of at least 32 characters encrypts the server-side store in the Docker volume testream-data. Keep the secret and volume private; losing the secret invalidates all sessions.
-- Plex account allowlist is mandatory. Plex PIN sign-in is verified with Plex. Passwords are never persisted.
+- Default mode requires a valid Stremio login; STREMIO_ALLOWLIST is optional. If AUTH_MODE=jellyfin, JELLYFIN_URL and a nonempty JELLYFIN_ALLOWLIST are mandatory; Jellyfin passwords are never persisted. Jellyfin session tokens are stored only in the encrypted server-side store.
 - Cookie is HttpOnly + SameSite=Lax. Secure is set only when HTTPS is correctly detected through configured TRUST_PROXY=true. Reverse-proxy exposure requires a separate security review.
 - ffmpeg and ffprobe use spawn with argv; no shell.
 - safeUrl blocks private/local IPs unless trusted. This is not complete protection from DNS rebinding/redirect races in untrusted media endpoints: use trusted add-ons, stay localhost-bound and harden before public exposure.
@@ -71,7 +80,8 @@ Troubleshooting: `docker compose logs -f testream`. Source IDs are transient; re
 
 - server/app.js: Express + WebSocket relay
 - server/stremio.js: account, catalog, metadata, library, stream choices and progress
-- server/plex.js: Plex login, allowlist
+- server/access.js: selectable authentication mode and allowlist checks
+- server/jellyfin.js: optional Jellyfin login
 - server/ffmpeg.js: ffmpeg 7+ arguments and process lifecycle
 - server/net.js: source URL validation
 - server/sessions.js: encrypted sessions
