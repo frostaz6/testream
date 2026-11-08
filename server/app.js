@@ -168,7 +168,7 @@ server.on('upgrade',(req,socket,head)=>{
     const u=new URL(req.url,'http://localhost');
     if(u.pathname!=='/ws')throw new Error('Not found');
     const bench=u.searchParams.get('benchmark')==='1';
-    if(!bench&&!session.stremio)throw new Error('Stremio sign-in required');
+    // Live streams are allowed under Jellyfin authentication without a Stremio account.
     const source=bench?null:stremio.selectedStream(session,u.searchParams.get('streamId'));
     if(!bench&&!source)throw new Error('Stream selection expired');
     if(!bench&&!source.live&&!session.stremio)throw new Error('Stremio sign-in required for on-demand media');
