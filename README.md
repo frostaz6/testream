@@ -52,6 +52,8 @@ To start it alongside TeStream, run `docker compose --profile fastchannels up -d
 Open `http://127.0.0.1:5523/admin/` **on the Docker host** (or through an SSH tunnel).
 Switch FastChannels to **Advanced mode** and configure the provider logins inside FastChannels, never inside TeStream.
 
+For testing clear channels entirely inside Docker, the default `FASTCHANNELS_PUBLIC_BASE_URL=http://fastchannels:5523` lets TeStream resolve playback endpoints through the private Compose network. Set `STREAM_HOST_ALLOWLIST=fastchannels` for this trusted container name. The `fastchannels` hostname is **not** reachable from your separate TV device.
+
 By default, the FastChannels admin interface is localhost-only. For an Android TV bridge, its player app must reach FastChannels over your private network: choose your specific LAN interface address for `FASTCHANNELS_BIND_IP` and a reachable `FASTCHANNELS_PUBLIC_BASE_URL` only when you're ready, and restrict access with the host firewall. The default localhost URL cannot be reached from a separate Android TV box.
 
 FastChannels needs to pair ADB with the device and an **authorized working capture source** (HDMI Capture or ah4c) before the bridge feeds become functional. FastChannels documentation calls out onn. Android TV devices as possible player targets, but actual model, DRM, HDCP and encoder compatibility require testing.
