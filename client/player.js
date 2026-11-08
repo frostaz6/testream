@@ -219,13 +219,26 @@ export class CanvasPlayback{
     },10);
   }
   onStatus(m){
-    if(m.type==='error'){this.status(m.message);this.metrics.error=m.message;}
+    if(m.type==='error'){
+      this.status(m.message||'The stream failed');this.metrics.error=m.message;
+    }
+    if(m.type==='firstPacket')this.metrics.firstPacketMs=m.firstPacketMs;
     if(m.type==='status'){
       this.metrics.bufferedSeconds=m.bufferedSeconds||0;
       this.metrics.throughputBps=m.throughputBps||0;
       this.metrics.encoderFps=m.fps||0;
+      this.metrics.encoderFrames=m.frames||0;
+      this.metrics.source=m.source||'';
+      if(Number.isFinite(m.firstPacketMs))this.metrics.firstPacketMs=m.firstPacketMs;
     }
-    if(m.type==='ended'){this.reportProgress();this.status(m.code?'Stream failed: '+(m.error||m.code):'Playback finished');this.paused=true;}
+    if(m.type==='ended'){
+      this.reportProgress();
+      this.metrics.failureKind=m.failureKind||'';
+      this.metrics.error=m.error||this.metrics.error;
+      this.status(m.error?'Stream failed: '+m.error:
+        this.opts.live?'Live feed ended; check the upstream capture.':'Playback finished');
+      this.paused=true;
+    }
     if(m.type==='started')this.metrics.started=true;
   }
   current(){return this.seekAnchor+Math.max(0,this.playedSeconds||0);}
@@ -296,7 +309,11 @@ export class CanvasPlayback{
         'Frame cadence: '+mean.toFixed(1)+'ms ± '+jitter.toFixed(1)+'ms\n'+
         'Server WS pending: '+(this.metrics.bufferedSeconds||0).toFixed(3)+'s\n'+
         'Encoder fps: '+(this.metrics.encoderFps||0).toFixed(1)+
-        '\nUnderruns /30s: '+this.underruns.length+'\nAudioContext: '+this.metrics.sampleRate+' Hz';
+        ' | frames: '+(this.metrics.encoderFrames||0)+'\n'+
+        'First encoder packet: '+(this.metrics.firstPacketMs==null?'waiting':this.metrics.firstPacketMs+'ms')+'\n'+
+        'First decoded picture: '+(this.metrics.startupMs==null?'waiting':Math.round(this.metrics.startupMs)+'ms')+'\n'+
+        'Underruns /30s: '+this.underruns.length+'\nAudioContext: '+this.metrics.sampleRate+' Hz'+
+        (this.metrics.error?'\nLatest issue: '+this.metrics.error:'');
     }
   }
   async handleKey(e){
