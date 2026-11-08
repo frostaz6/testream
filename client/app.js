@@ -87,7 +87,7 @@ async function navigate(){
       const data=await api('/api/home');if(ticket!==routeSeq)return;
       main.innerHTML='<div class="hero"><div class="eyebrow">YOUR ENTERTAINMENT, YOUR SERVER</div>'+
         '<h1>Pick up right where you left off.</h1>'+
-        '<p>Movies, shows, and streams from your Stremio account. Encoded on your Plex host, decoded on a canvas.</p>'+
+        '<p>Movies, shows, and streams from your Stremio account. Encoded on your Docker server, decoded on a canvas.</p>'+
         '<a href="#library" class="btn">Explore your library →</a></div>'+
         section('Continue Watching',data.continueWatching,'Your in-progress titles will appear here.')+
         section('Recently Added',data.recentlyAdded,'Add a movie or series to Stremio to get started.')+
