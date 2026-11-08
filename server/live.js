@@ -118,7 +118,7 @@ export async function lineup(force=false,at=Date.now()){
     const {now,next}=currentPrograms(events,at);
     // Do not return stream URLs or session tokens in channel listings.
     return {id:c.id,name:c.name,group:c.group,channelNumber:c.channelNumber,
-      tvgId:c.tvgId,kind:c.kind,bridge:c.bridge,now,next};
+      tvgId:c.tvgId,provider:c.provider,kind:c.kind,bridge:c.bridge,now,next};
   })};
 }
 
