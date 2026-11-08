@@ -164,7 +164,7 @@ async function showLive(ticket,force=false){
     '<div class="panel"><h3>DIRECTV STREAM readiness</h3>'+
     '<p>'+directv.length+' DIRECTV channels listed; '+directvCapture+' in the capture feed. '+
       (directvCapture?'Channel listing detected — playback still requires a successful tune and decoded video/audio.':
-        'No DIRECTV capture channels detected. Sign in via FastChannels device code, enable the DIRECTV source, configure its bridge, and import its separate bridge M3U.')+
+        'No DIRECTV capture channels detected. Check FastChannels device-code sign-in, enable the DIRECTV source, and import its hardware bridge feed (prefer one mixed playlist for Gracenote channels).')+
     '</p><button class="btn secondary tiny" id="directvOnly">Show DIRECTV channels</button>'+
     '<p class="muted">A nonempty lineup is not proof of a usable HDMI feed. Run the FastChannels Bridge → Live bridge test and then play a channel here with Stats enabled.</p></div>'+
     '<div class="liveToolbar"><input class="input" id="filterLive" placeholder="Find a channel, show or event…" type="search">'+
