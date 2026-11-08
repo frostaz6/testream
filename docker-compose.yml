@@ -16,6 +16,7 @@ services:
       JELLYFIN_URL: "${JELLYFIN_URL:-}"
       JELLYFIN_ALLOWLIST: "${JELLYFIN_ALLOWLIST:-}"
       STREAM_HOST_ALLOWLIST: "${STREAM_HOST_ALLOWLIST:-}"
+      FASTCHANNELS_M3U_URL: "${FASTCHANNELS_M3U_URL:-}"
       TRUST_PROXY: "${TRUST_PROXY:-false}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
