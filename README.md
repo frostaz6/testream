@@ -93,6 +93,23 @@ This player accepts direct http(s) URLs returned by Stremio add-ons. It cannot d
 
 Stremio resume points are updated via datastoreGet/datastorePut every 15 seconds and on playback changes. Some streams lack a probe-able duration; the seek bar is unavailable if the server cannot learn its duration.
 
+## DIRECTV STREAM acceptance test — required before calling it working
+
+The repository and CI do not hold a DIRECTV account or HDMI capture device. We have **not observed real DIRECTV playback**. To consider this functional, verify each stage below:
+
+1. **Login:** Start FastChannels and open its Admin UI. In Advanced mode, enable **DirecTV Stream**, select **Sign in with a code**, approve on DIRECTV's website, then run its channel scrape. Confirm the account is authorized and the chosen channel is in your subscription.
+2. **Hardware:** FastChannels → Bridge: configure its Android TV/Fire TV companion app and a working, permitted HDMI Capture or ah4c source. A compatible onn. Android TV device is a possible player. The device must reach FastChannels on your private LAN; its Docker hostname alone is insufficient. HDCP restrictions may prevent output and must not be bypassed.
+3. **Healthcheck:** In Bridge → Post-install Healthcheck, run the healthcheck and then Live bridge test on an entitled DIRECTV channel. Observe **moving picture and actual audible sound** from the capture output. A successful channel scrape, ADB launch or HTTP 200 alone is not proof.
+4. **Bridge feed:** From FastChannels → Feeds → Bridge outputs copy the exact HDMI Capture/ah4c M3U and EPG URLs into FASTCHANNELS_BRIDGE_M3U_URL and FASTCHANNELS_BRIDGE_EPG_URL. Add only trusted endpoint hosts/IPs to STREAM_HOST_ALLOWLIST. Use the hardware-specific feed, not ordinary HLS or PrismCast output.
+5. **Canvas tune:** TeStream → Live TV → Show DIRECTV channels. Tune an entitled channel and enable Stats. Verify (a) first encoder packet, (b) nonzero encoded video frames, (c) first Canvas picture, and (d) WebAudio activity. Capture bridge URLs may end in .m3u8 but redirect to HTTP MPEG-TS, so TeStream forces the bridge input demuxer to MPEG-TS.
+6. **Soak test:** Watch at least five minutes, change quality, reconnect and monitor frame jitter, audio queue and underruns. A black or silent feed is a failure. For physical display-to-speaker A/V sync, use an external microphone/camera test; callback timing is not sufficient.
+
+Single HDMI capture means **one tuned channel at a time**. TeStream uses a local tuner-lease count, not a distributed lock; it does not coordinate with external Channels DVR viewers or multiple TeStream replicas. Use tuner limits at the capture/bridge layer when other clients share the device.
+
+### Synthetic bridge regression
+
+Run: npm run test:bridge. It generates video/audio MPEG-TS, serves a fake FastChannels-like .m3u8 redirect to an MPEG-TS encoder endpoint, runs the real ffmpeg pipeline and verifies MPEG-1/MP2 output with ffprobe. This verifies the transport path, **not** DIRECTV credentials, DRM, HDMI/HDCP, entitlement or physical A/V sync.
+
 ## Test
 
 Requires Node 22+, ffmpeg 7+, ffprobe and npm:
@@ -101,6 +118,7 @@ Requires Node 22+, ffmpeg 7+, ffprobe and npm:
 2. `npm test`
 3. `npm run build`
 4. `npm run test:media`
+5. `npm run test:bridge`
 
 The media test encodes a generated flash/beep MPEG-TS, checks codecs, transport timestamps and frame cadence, and verifies 23.976 fps material stays 23.976 fps. It does **not** prove actual network streaming, hardware A/V synchronization or integration with the owner's Stremio account. The real-stream validation procedure is to authenticate, select an HTTP source, play each quality, seek/pause/resume, inspect the player Stats and Docker logs, and run the benchmark page.
 
